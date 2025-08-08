@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Add Product to Grandma's Kitchen</title>
+  <style>
+    body { font-family: Arial, sans-serif; background: #fffdf8; color: #333; padding: 1rem; margin: 0; }
+    h1 { text-align: center; font-size: 1.5rem; margin-bottom: 1rem; }
+    form { display: grid; gap: 1rem; background: #fff; padding: 1.5rem; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); margin: 0 auto; width: 100%; max-width: 600px; box-sizing: border-box; }
+    label { font-weight: bold; font-size: 0.9rem; }
+    input, textarea, select { width: 100%; padding: 0.6rem; border: 1px solid #ccc; border-radius: 4px; font-size: 1rem; box-sizing: border-box; }
+    button { background-color: #44633f; color: #fff; padding: 0.75rem; border: none; border-radius: 5px; cursor: pointer; font-size: 1rem; }
+    button:hover { background-color: #2e472b; }
+    #preview { background: #f4f4f4; padding: 1rem; border-radius: 6px; margin-top: 2rem; display: none; }
+    img { max-width: 100%; height: auto; border-radius: 4px; margin-top: 0.5rem; }
+    @media (max-width: 600px) {
+      body { padding: 1rem; }
+      form { padding: 1rem; }
+      h1 { font-size: 1.25rem; }
+    }
+  </style>
+</head>
+<body>
+  <h1>📦 Add a New Product</h1>
+
+  <form id="loginForm">
+    <label>Username</label>
+    <input type="text" id="username" required />
+    <label>Password</label>
+    <input type="password" id="password" required />
+    <button type="submit">Login</button>
+  </form>
+
+  <form id="productForm" style="display:none">
+    <label>Manufacturer Category</label>
+    <input name="manufacturer_category" required />
+
+    <label>My Product #</label>
+    <input name="product_number" required />
+
+    <label>Affiliate Link (Amazon)</label>
+    <input name="affiliate_link" type="url" required />
+
+    <label>Amazon Title</label>
+    <input name="amazon_title" />
+
+    <label>Amazon Description</label>
+    <textarea name="amazon_description"></textarea>
+
+    <label>My Title</label>
+    <input name="my_title" />
+
+    <label>My Subtitle</label>
+    <input name="my_subtitle" />
+
+    <label>Short Description</label>
+    <textarea name="my_description_short"></textarea>
+
+    <label>Long Description</label>
+    <textarea name="my_description_long"></textarea>
+
+    <label>Main Image URL</label>
+    <input name="image_main" type="url" />
+
+    <label>Small Image URL (3x3cm)</label>
+    <input name="image_small" type="url" />
+
+    <label>Extra Image 1 URL</label>
+    <input name="image_extra_1" type="url" />
+
+    <label>Extra Image 2 URL</label>
+    <input name="image_extra_2" type="url" />
+
+    <label>Where Advertised</label>
+    <input name="where_advertised" placeholder="Instagram, Facebook" />
+
+    <label>Ad Type</label>
+    <select name="ad_type">
+      <option value="organic">Organic</option>
+      <option value="paid">Paid</option>
+      <option value="unpaid">Unpaid</option>
+    </select>
+
+    <label>Added By</label>
+    <input name="added_by" />
+
+    <label>Amazon Category</label>
+    <input name="amazon_category" />
+
+    <label>Product Type</label>
+    <select name="product_type">
+      <option value="powder">Powder</option>
+      <option value="tablet">Tablet</option>
+      <option value="pill">Pill</option>
+      <option value="liquid">Liquid</option>
+    </select>
+
+    <label>Commission Info</label>
+    <input name="commission" placeholder="e.g. 2% Amazon rate" />
+
+    <label>Upload Main Image</label>
+    <input type="file" name="upload_main_image" accept="image/*" />
+
+    <button type="submit">Submit Product</button>
+  </form>
+
+  <div id="preview"></div>
+
+  <!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Add Product to Grandma's Kitchen</title>
+  <style>
+    body { font-family: Arial, sans-serif; background: #fffdf8; color: #333; padding: 1rem; margin: 0; }
+    h1 { text-align: center; font-size: 1.5rem; margin-bottom: 1rem; }
+    form { display: grid; gap: 1rem; background: #fff; padding: 1.5rem; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); margin: 0 auto; width: 100%; max-width: 600px; box-sizing: border-box; }
+    label { font-weight: bold; font-size: 0.9rem; }
+    input, textarea, select { width: 100%; padding: 0.6rem; border: 1px solid #ccc; border-radius: 4px; font-size: 1rem; box-sizing: border-box; }
+    button { background-color: #44633f; color: #fff; padding: 0.75rem; border: none; border-radius: 5px; cursor: pointer; font-size: 1rem; }
+    button:hover { background-color: #2e472b; }
+    #preview, #confirmation { background: #f4f4f4; padding: 1rem; border-radius: 6px; margin-top: 2rem; display: none; }
+    #thumbnailPreview { max-width: 100px; margin: 0.5rem 0; display: block; }
+    img { max-width: 100%; height: auto; border-radius: 4px; margin-top: 0.5rem; }
+    @media (max-width: 600px) {
+      body { padding: 1rem; }
+      form { padding: 1rem; }
+      h1 { font-size: 1.25rem; }
+    }
+  </style>
+</head>
+<body>
+  <h1>📦 Add a New Product</h1>
+
+  <form id="loginForm">
+    <label>Username</label>
+    <input type="text" id="username" required />
+    <label>Password</label>
+    <input type="password" id="password" required />
+    <button type="submit">Login</button>
+  </form>
+
+  <form id="productForm" style="display:none">
+    <label>Manufacturer Category</label>
+    <input name="manufacturer_category" required />
+
+    <label>My Product #</label>
+    <input name="product_number" required />
+
+    <label>Affiliate Link (Amazon)</label>
+    <input name="affiliate_link" type="url" required />
+
+    <label>Amazon Title</label>
+    <input name="amazon_title" />
+
+    <label>Amazon Description</label>
+    <textarea name="amazon_description"></textarea>
+
+    <label>My Title</label>
+    <input name="my_title" />
+
+    <label>My Subtitle</label>
+    <input name="my_subtitle" />
+
+    <label>Short Description</label>
+    <textarea name="my_description_short"></textarea>
+
+    <label>Long Description</label>
+    <textarea name="my_description_long"></textarea>
+
+    <label>Main Image URL</label>
+    <input name="image_main" type="url" id="mainImageUrl" />
+    <img id="thumbnailPreview" />
+
+    <label>Small Image URL (3x3cm)</label>
+    <input name="image_small" type="url" />
+
+    <label>Extra Image 1 URL</label>
+    <input name="image_extra_1" type="url" />
+
+    <label>Extra Image 2 URL</label>
+    <input name="image_extra_2" type="url" />
+
+    <label>Where Advertised</label>
+    <input name="where_advertised" placeholder="Instagram, Facebook" />
+
+    <label>Ad Type</label>
+    <select name="ad_type">
+      <option value="organic">Organic</option>
+      <option value="paid">Paid</option>
+      <option value="unpaid">Unpaid</option>
+    </select>
+
+    <label>Added By</label>
+    <input name="added_by" />
+
+    <label>Amazon Category</label>
+    <input name="amazon_category" />
+
+    <label>Product Type</label>
+    <select name="product_type">
+      <option value="powder">Powder</option>
+      <option value="tablet">Tablet</option>
+      <option value="pill">Pill</option>
+      <option value="liquid">Liquid</option>
+    </select>
+
+    <label>Commission Info</label>
+    <input name="commission" placeholder="e.g. 2% Amazon rate" />
+
+    <label>Upload Main Image</label>
+    <input type="file" name="upload_main_image" accept="image/*" />
+
+    <button type="submit">Submit Product</button>
+  </form>
+
+  <div id="preview"></div>
+  <div id="confirmation"></div>
+
+  <script src="../scripts/form-submit.js"></script>
+
+</body>
+</html>
+
+</body>
+</html>

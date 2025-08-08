@@ -1,0 +1,38 @@
+/* Grandma's Kitchen Style Sheet */
+body {
+  font-family: Arial, sans-serif;
+  background-color: #fffdf8;
+  color: #333;
+  padding: 1rem;
+  margin: 0;
+}
+
+h1 {
+  color: #44633f;
+  text-align: center;
+  margin-bottom: 1rem;
+}
+
+p {
+  max-width: 600px;
+  margin: 0 auto 1.5rem;
+  font-size: 1.1rem;
+  line-height: 1.6;
+  text-align: center;
+}
+
+a {
+  display: block;
+  width: fit-content;
+  margin: 0 auto;
+  padding: 0.75rem 1rem;
+  background: #44633f;
+  color: white;
+  text-decoration: none;
+  border-radius: 6px;
+  font-weight: bold;
+}
+
+a:hover {
+  background: #2e472b;
+}
