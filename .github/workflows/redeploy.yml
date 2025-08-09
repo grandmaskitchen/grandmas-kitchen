@@ -1,5 +1,4 @@
-.github/workflows/redeploy.yml
-name: Force Cloudflare Pages Redeploy
+name: "Force Cloudflare Pages Redeploy"
 
 on:
   workflow_dispatch:
@@ -21,7 +20,7 @@ jobs:
           CF_PROJECT_NAME: ${{ secrets.CF_PROJECT_NAME }}
         run: |
           sudo apt-get update -y && sudo apt-get install -y jq
-
+          
           # Call Cloudflare Pages Deployments API
           RESP=$(curl -sS -X POST \
             -H "Authorization: Bearer $CF_API_TOKEN" \
@@ -40,3 +39,4 @@ jobs:
           fi
 
           echo "Deploy request accepted by Cloudflare."
+
