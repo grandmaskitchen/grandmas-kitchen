@@ -1,0 +1,42 @@
+.github/workflows/redeploy.yml
+name: Force Cloudflare Pages Redeploy
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 */6 * * *"  # every 6 hours
+
+concurrency:
+  group: pages-redeploy
+  cancel-in-progress: false
+
+jobs:
+  redeploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Cloudflare Pages deploy
+        env:
+          CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+          CF_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
+          CF_PROJECT_NAME: ${{ secrets.CF_PROJECT_NAME }}
+        run: |
+          sudo apt-get update -y && sudo apt-get install -y jq
+
+          # Call Cloudflare Pages Deployments API
+          RESP=$(curl -sS -X POST \
+            -H "Authorization: Bearer $CF_API_TOKEN" \
+            -H "Content-Type: application/json" \
+            "https://api.cloudflare.com/client/v4/accounts/$CF_ACCOUNT_ID/pages/projects/$CF_PROJECT_NAME/deployments")
+
+          echo "$RESP" | jq .
+
+          # Fail with a clear message if Cloudflare says no
+          SUCCESS=$(echo "$RESP" | jq -r '.success')
+          if [ "$SUCCESS" != "true" ]; then
+            ERRORS=$(echo "$RESP" | jq -r '.errors[]? | "\(.code): \(.message)"')
+            echo "Deploy failed. Cloudflare said:"
+            echo "$ERRORS"
+            exit 1
+          fi
+
+          echo "Deploy request accepted by Cloudflare."
