@@ -47,7 +47,7 @@ nav a:hover{text-decoration:underline}
 
 /* ---- Logo ---- */
 header img {
-  max-height: 80px;       /* Stops the logo from being too tall */
+  max-height: 100px;       /* Stops the logo from being too tall */
   width: auto;            /* Keeps correct proportions */
   display: block;         /* Removes any extra space below */
   margin: 0 auto;         /* Centers the logo in the header */
