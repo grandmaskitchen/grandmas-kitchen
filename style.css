@@ -1,38 +1,49 @@
-/* Grandma's Kitchen Style Sheet */
-body {
-  font-family: Arial, sans-serif;
-  background-color: #fffdf8;
-  color: #333;
-  padding: 1rem;
-  margin: 0;
+/* ---- Brand base ---- */
+:root{
+  --bg: #fbf7ef;          /* warm cream */
+  --card: #fff7ea;        /* light cream for panels */
+  --ink: #2f332f;         /* dark text */
+  --olive: #3f5f3b;       /* brand green */
+  --olive-600:#345232;
+  --accent:#e77a57;       /* coral for CTA */
+  --radius: 16px;
 }
 
-h1 {
-  color: #44633f;
-  text-align: center;
-  margin-bottom: 1rem;
-}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0;background:var(--bg);color:var(--ink);font:16px/1.6 system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,"Helvetica Neue",Arial}
+img{max-width:100%;height:auto;border-radius:12px}
 
-p {
-  max-width: 600px;
-  margin: 0 auto 1.5rem;
-  font-size: 1.1rem;
-  line-height: 1.6;
-  text-align: center;
-}
+/* ---- Layout ---- */
+.container{max-width:960px;margin:0 auto;padding:24px}
+.center{text-align:center}
 
-a {
-  display: block;
-  width: fit-content;
-  margin: 0 auto;
-  padding: 0.75rem 1rem;
-  background: #44633f;
-  color: white;
-  text-decoration: none;
-  border-radius: 6px;
-  font-weight: bold;
-}
+/* ---- Headings ---- */
+h1{font-size: clamp(2.2rem, 4vw, 3.5rem); color: var(--olive); margin: 24px 0 8px}
+h2{font-size: clamp(1.6rem, 3vw, 2.4rem); color: var(--olive); margin: 24px 0 12px}
+h3{font-size: clamp(1.2rem, 2.4vw, 1.6rem); color:#3a3a3a; letter-spacing:.02em}
 
-a:hover {
-  background: #2e472b;
+/* ---- Nav ---- */
+header{padding:18px 0}
+nav a{color:var(--olive);text-decoration:none;margin:0 10px}
+nav a:hover{text-decoration:underline}
+
+/* ---- Buttons ---- */
+.btn{
+  display:inline-block; padding:18px 28px; border-radius:14px;
+  background:var(--olive); color:#fff; font-weight:700;
+  text-decoration:none; box-shadow:0 4px 0 var(--olive-600);
 }
+.btn:hover{transform:translateY(-1px)}
+.btn-lg{font-size:1.6rem}
+.btn-accent{background:var(--accent); box-shadow:0 4px 0 #c86445}
+
+/* ---- Cards / panels ---- */
+.card{background:var(--card); border:1px solid #eee; border-radius:var(--radius); padding:20px; box-shadow:0 1px 0 #eee}
+
+/* ---- Product grid ---- */
+.grid{display:grid; gap:22px}
+.grid-2{grid-template-columns:repeat(auto-fit,minmax(280px,1fr))}
+.product-title{font-weight:800; font-size:1.25rem; margin:.75rem 0 .25rem}
+
+/* ---- Footer ---- */
+footer{padding:28px 0; text-align:center; color:#666}
