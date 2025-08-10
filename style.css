@@ -45,5 +45,12 @@ nav a:hover{text-decoration:underline}
 .grid-2{grid-template-columns:repeat(auto-fit,minmax(280px,1fr))}
 .product-title{font-weight:800; font-size:1.25rem; margin:.75rem 0 .25rem}
 
+/* ---- Logo ---- */
+header img {
+  max-height: 80px;       /* Stops the logo from being too tall */
+  width: auto;            /* Keeps correct proportions */
+  display: block;         /* Removes any extra space below */
+  margin: 0 auto;         /* Centers the logo in the header */
+  
 /* ---- Footer ---- */
 footer{padding:28px 0; text-align:center; color:#666}
