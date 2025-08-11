@@ -45,6 +45,33 @@ nav a:hover{text-decoration:underline}
 .grid-2{grid-template-columns:repeat(auto-fit,minmax(280px,1fr))}
 .product-title{font-weight:800; font-size:1.25rem; margin:.75rem 0 .25rem}
 
+/* Product image wrapper */
+.product-image {
+  width: 100%;
+  max-width: 200px;      /* Max size for desktop */
+  aspect-ratio: 1 / 1;   /* Always a square */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  background: #fff;      /* Optional background */
+  margin: 0 auto;        /* Centers the box */
+}
+
+/* Product image itself */
+.product-image img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;   /* No squishing, full image in frame */
+}
+
+/* Make bigger on small screens */
+@media (max-width: 600px) {
+  .product-image {
+    max-width: 300px; /* bigger on mobile */
+  }
+}
+
 /* ---- Logo ---- */
 header img {
   max-height: 100px;       /* Stops the logo from being too tall */
