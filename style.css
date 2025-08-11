@@ -5,6 +5,13 @@
   --radius:16px;
 }
 
+/* Centre the section title and keep the same line length as the body text */
+main h2{
+  max-width: 68ch;
+  margin: 2rem auto 1rem;   /* centers it */
+  text-align: center;
+}
+
 *{ box-sizing:border-box; }
 html,body{ margin:0; padding:0; background:var(--bg); color:var(--ink);
   font:16px/1.6 system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,"Helvetica Neue",Arial; }
