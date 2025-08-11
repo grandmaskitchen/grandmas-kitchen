@@ -30,6 +30,14 @@ main h2{
   margin: 2rem auto 1rem;   /* centers it */
   text-align: center;
 }
+/* Equal-height cards + bottom-aligned buttons */
+.grid { align-items: stretch; }                 /* ensure cards stretch in the grid */
+.grid-2 > .card { display: flex; flex-direction: column; }
+
+.card p:last-child{
+  margin-top: auto;    /* push the button block to the bottom */
+  margin-bottom: 0;    /* remove extra bottom gap differences */
+}
 /*Make cards equal height; keep button at the bottom */
 .card{ display:flex; flex-direction:column; }
 .card .btn{ margin-top:auto; }
