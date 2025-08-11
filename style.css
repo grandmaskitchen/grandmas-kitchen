@@ -1,39 +1,37 @@
 /* ---- Brand base ---- */
 :root{
-  --bg: #fbf7ef;          /* warm cream */
-  --card: #fff7ea;        /* light cream for panels */
-  --ink: #2f332f;         /* dark text */
-  --olive: #3f5f3b;       /* brand green */
-  --olive-600:#345232;
-  --accent:#e77a57;       /* coral for CTA */
-  --radius: 16px;
-}
-/* Center all content on the page */
-body {
-  text-align: center;
+  --bg:#fbf7ef; --card:#fff7ea; --ink:#2f332f;
+  --olive:#3f5f3b; --olive-600:#345232; --accent:#e77a57;
+  --radius:16px;
 }
 
-header, main, footer {
-  text-align: center;
-}
+*{ box-sizing:border-box; }
+html,body{ margin:0; padding:0; background:var(--bg); color:var(--ink);
+  font:16px/1.6 system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,"Helvetica Neue",Arial; }
+img{ max-width:100%; height:auto; border-radius:12px; }
 
-*{box-sizing:border-box}
-html,body{margin:0;padding:0;background:var(--bg);color:var(--ink);font:16px/1.6 system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,"Helvetica Neue",Arial}
-img{max-width:100%;height:auto;border-radius:12px}
+/* ---- Alignment: only header/footer centered, body text left ---- */
+body{ text-align:left; }
+header, footer{ text-align:center; }
 
 /* ---- Layout ---- */
-.container{max-width:960px;margin:0 auto;padding:24px}
-.center{text-align:center}
+.container{ width:min(100% - 2rem, 1100px); margin-inline:auto; padding:24px; }
+.container--narrow{ width:min(100% - 2rem, 68ch); }
+
+/* Make paragraphs comfy to read */
+main p{ max-width:68ch; margin:1rem auto; text-align:left; }
 
 /* ---- Headings ---- */
-h1{font-size: clamp(2.2rem, 4vw, 3.5rem); color: var(--olive); margin: 24px 0 8px}
-h2{font-size: clamp(1.6rem, 3vw, 2.4rem); color: var(--olive); margin: 24px 0 12px}
-h3{font-size: clamp(1.2rem, 2.4vw, 1.6rem); color:#3a3a3a; letter-spacing:.02em}
+h1{ font-size:clamp(2.2rem,4vw,3.5rem); color:var(--olive); margin:24px 0 8px; }
+h2{ font-size:clamp(1.6rem,3vw,2.4rem); color:var(--olive); margin:24px 0 12px; }
+h3{ font-size:clamp(1.2rem,2.4vw,1.6rem); color:#3a3a3a; letter-spacing:.02em; }
 
 /* ---- Nav ---- */
-header{padding:18px 0}
-nav a{color:var(--olive);text-decoration:none;margin:0 10px}
-nav a:hover{text-decoration:underline}
+header{ padding:18px 0; }
+nav{ display:flex; gap:.5rem 1rem; justify-content:center; flex-wrap:wrap; }
+nav a{ color:var(--olive); text-decoration:none; }
+nav a:hover{ text-decoration:underline; }
+nav a + a::before{ content:"|"; opacity:.5; margin-inline:.5rem; } /* auto separators */
 
 /* ---- Buttons ---- */
 .btn{
@@ -41,74 +39,55 @@ nav a:hover{text-decoration:underline}
   background:var(--olive); color:#fff; font-weight:700;
   text-decoration:none; box-shadow:0 4px 0 var(--olive-600);
 }
-.btn:hover{transform:translateY(-1px)}
-.btn-lg{font-size:1.6rem}
-.btn-accent{background:var(--accent); box-shadow:0 4px 0 #c86445}
+.btn:hover{ transform:translateY(-1px); }
+.btn-lg{ font-size:1.6rem; }
+.btn-accent{ background:var(--accent); box-shadow:0 4px 0 #c86445; }
 
 /* ---- Cards / panels ---- */
-.card{background:var(--card); border:1px solid #eee; border-radius:var(--radius); padding:20px; box-shadow:0 1px 0 #eee}
+.card{ background:var(--card); border:1px solid #eee; border-radius:var(--radius);
+  padding:20px; box-shadow:0 1px 0 #eee; }
 
 /* ---- Product grid ---- */
-.grid{display:grid; gap:22px}
-.grid-2{grid-template-columns:repeat(auto-fit,minmax(280px,1fr))}
-.product-title{font-weight:800; font-size:1.25rem; margin:.75rem 0 .25rem}
+.grid{ display:grid; gap:22px; }
+.grid-2{ grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); }
+.product-title{ font-weight:800; font-size:1.25rem; margin:.75rem 0 .25rem; }
 
 /* Product image wrapper */
-.product-image {
-  width: 100%;
-  max-width: 200px;      /* Max size for desktop */
-  aspect-ratio: 1 / 1;   /* Always a square */
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  overflow: hidden;
-  background: #fff;      /* Optional background */
-  margin: 0 auto;        /* Centers the box */
+.product-image{
+  width:100%; max-width:200px; aspect-ratio:1/1;
+  display:flex; align-items:center; justify-content:center;
+  overflow:hidden; background:#fff; margin:0 auto;
 }
 
 /* Product image itself */
-.product-image img {
-  max-width: 100%;
-  max-height: 100%;
-  object-fit: contain;   /* No squishing, full image in frame */
+.product-image img{
+  max-width:100%; max-height:100%; object-fit:contain;
 }
 
 /* Make bigger on small screens */
-@media (max-width: 600px) {
-  .product-image {
-    max-width: 300px; /* bigger on mobile */
-  }
+@media (max-width: 600px){
+  .product-image{ max-width:300px; }
+} /* ← close the media query */
 
 /* ===== Fullscreen image overlay ===== */
-#imageOverlay {
-  position: fixed;
-  inset: 0;             /* shorthand for top/right/bottom/left: 0 */
-  display: none;        /* hidden until opened */
-  justify-content: center;
-  align-items: center;
-  background: rgba(0,0,0,0.85);
-  z-index: 9999;
+#imageOverlay{
+  position:fixed; inset:0; display:none; justify-content:center; align-items:center;
+  background:rgba(0,0,0,.85); z-index:9999;
 }
-#imageOverlay img {
-  max-width: 95%;
-  max-height: 95%;
-  border-radius: 10px;
-  box-shadow: 0 12px 40px rgba(0,0,0,0.5);
+#imageOverlay img{
+  max-width:95%; max-height:95%; border-radius:10px; box-shadow:0 12px 40px rgba(0,0,0,.5);
 }
 
 /* Prevent background scroll when overlay is open */
-.no-scroll { overflow: hidden; }
+.no-scroll{ overflow:hidden; }
 
 /* “104 years” doesn’t break across lines */
-.nowrap { white-space: nowrap; }
-
+.nowrap{ white-space:nowrap; }
 
 /* ---- Logo ---- */
-header img {
-  max-height: 100px;       /* Stops the logo from being too tall */
-  width: auto;            /* Keeps correct proportions */
-  display: block;         /* Removes any extra space below */
-  margin: 0 auto;         /* Centers the logo in the header */
-  
+header img{
+  max-height:100px; width:auto; display:block; margin:0 auto;
+} /* ← close the rule */
+
 /* ---- Footer ---- */
-footer{padding:28px 0; text-align:center; color:#666}
+footer{ padding:28px 0; color:#666; }
