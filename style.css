@@ -143,4 +143,10 @@ header img{
 } /* ← close the rule */
 
 /* ---- Footer ---- */
+.affiliate-note{
+  font-size:.9rem;
+  color:#666;
+  text-align:center;
+  margin-top:.5rem;
+}
 footer{ padding:28px 0; color:#666; }
