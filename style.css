@@ -99,6 +99,10 @@ nav a:hover{text-decoration:underline}
 /* Prevent background scroll when overlay is open */
 .no-scroll { overflow: hidden; }
 
+/* “104 years” doesn’t break across lines */
+.nowrap { white-space: nowrap; }
+
+
 /* ---- Logo ---- */
 header img {
   max-height: 100px;       /* Stops the logo from being too tall */
