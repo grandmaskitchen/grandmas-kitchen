@@ -4,14 +4,14 @@
   --olive:#3f5f3b; --olive-600:#345232; --accent:#e77a57;
   --radius:16px;
 }
-/* Consistent product detail title */
-.product-title{
-  font-weight: 800;
-  font-size: clamp(2.2rem, 4vw, 3.5rem);
-  line-height: 1.15;
-  color: var(--olive);
-  text-align: center;
-  margin: 0 0 .75rem;
+/* Detail page title */
+.product-title--detail{
+  font-weight:800;
+  font-size:clamp(2.2rem, 4vw, 3.5rem);
+  line-height:1.15;
+  color:var(--olive);
+  text-align:center;
+  margin:0 0 .75rem;
 }
 /* Product image itself — mobile-safe */
 .product-image img{
@@ -95,6 +95,12 @@ nav a + a::before{ content:"|"; opacity:.5; margin-inline:.5rem; } /* auto separ
 .btn:hover{ transform:translateY(-1px); }
 .btn-lg{ font-size:1.6rem; }
 .btn-accent{ background:var(--accent); box-shadow:0 4px 0 #c86445; }
+
+/* Card titles */
+.card .product-title{
+  font-weight:800;
+  font-size:1.25rem;
+  margin:.75rem 0 .25rem;
 
 /* ---- Cards / panels ---- */
 .card{ background:var(--card); border:1px solid #eee; border-radius:var(--radius);
