@@ -142,11 +142,14 @@ header img{
   max-height:100px; width:auto; display:block; margin:0 auto;
 } /* ← close the rule */
 
-/* ---- Footer ---- */
-.affiliate-note{
-  font-size:.9rem;
-  color:#666;
-  text-align:center;
-  margin-top:.5rem;
+/* Center all affiliate disclosures */
+main p.affiliate-note,
+footer .affiliate-note{
+  text-align: center;
+  margin: .5rem auto 0;
+  max-width: 68ch;
+  color: #666;
+  font-size: .9rem;
 }
+/* ---- Footer ---- */
 footer{ padding:28px 0; color:#666; }
