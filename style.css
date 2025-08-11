@@ -4,6 +4,15 @@
   --olive:#3f5f3b; --olive-600:#345232; --accent:#e77a57;
   --radius:16px;
 }
+/* Consistent product detail title */
+.product-title{
+  font-weight: 800;
+  font-size: clamp(2.2rem, 4vw, 3.5rem);
+  line-height: 1.15;
+  color: var(--olive);
+  text-align: center;
+  margin: 0 0 .75rem;
+}
 
 /* Make product titles brand-green (not purple when visited */
 .card h3 a{ color: var(--olive); text-decoration: none; }
