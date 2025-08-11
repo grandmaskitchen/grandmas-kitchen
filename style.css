@@ -8,6 +8,14 @@
   --accent:#e77a57;       /* coral for CTA */
   --radius: 16px;
 }
+/* Center all content on the page */
+body {
+  text-align: center;
+}
+
+header, main, footer {
+  text-align: center;
+}
 
 *{box-sizing:border-box}
 html,body{margin:0;padding:0;background:var(--bg);color:var(--ink);font:16px/1.6 system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,"Helvetica Neue",Arial}
