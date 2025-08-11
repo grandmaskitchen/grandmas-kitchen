@@ -2,20 +2,70 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Chia Seeds – Grandma’s Kitchen</title>
-  <link rel="stylesheet" href="../style.css" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Organic Chia Seeds • Grandma’s Pantry</title>
+  <link rel="stylesheet" href="/style.css" />
+  <style>
+    /* page-specific: bigger square hero */
+    .product-hero{ max-width:340px; margin:0 auto 1rem; }
+    @media (max-width:600px){ .product-hero{ max-width:320px; } }
+  </style>
 </head>
 <body>
-  <div style="max-width: 600px; margin: 0 auto; padding: 1rem; text-align: center;">
-    🌱 Organic Chia Seeds</h1>
-    <img 
-  src="https://m.media-amazon.com/images/I/71Shyvn77oL._AC_SL1500_.jpg" 
-  alt="Organic Chia Seeds"
-  style="max-height: 300px; width: auto; display: block; margin: 0 auto; border-radius: 6px;" />
-    <p>High in Omega 3, Fibre and Protein — these gluten-free seeds are a pantry essential.</p>
-    <a href="https://amzn.to/4lXWowr" target="_blank">Buy on Amazon</a>
+
+<header class="container center">
+  <a href="/index.html">
+    <img src="/images/logo.jpg" alt="Grandma’s Kitchen Logo" style="max-height:100px;margin-bottom:1rem;">
+  </a>
+  <nav aria-label="Primary">
+    <a href="/index.html">Home</a>
+    <a href="/about.html">About</a>
+    <a href="/recipes.html">Recipes</a>
+    <a href="/shop.html" aria-current="page">Shop</a>
+  </nav>
+  <p>Simple food. Lifelong health. Inspired by a 104-year legacy.</p>
+</header>
+
+<main>
+  <div class="container container--narrow">
+    <article aria-labelledby="prod-title">
+      <a class="product-image product-hero">
+        <img
+          src="https://m.media-amazon.com/images/I/71Shyvn77oL._AC_SL1500_.jpg"
+          alt="Organic chia seeds pouch"
+          loading="lazy" decoding="async">
+      </a>
+
+      <h1 id="prod-title">Organic Chia Seeds</h1>
+      <p class="lead">Tiny seeds packed with fibre and plant omega-3—perfect for puddings, porridge, smoothies, and baking.</p>
+
+      <h2>Why we like them</h2>
+      <ul>
+        <li>High in fibre—helps keep you fuller for longer.</li>
+        <li>Plant-based omega-3 (ALA).</li>
+        <li>Absorbs liquid—ideal for chia puddings & overnight oats.</li>
+        <li>Easy to add to porridge, smoothies, salads, and bakes.</li>
+        <li>Gluten-free whole seed; no additives.</li>
+      </ul>
+
+      <p>
+        <!-- Replace with your exact product URL if you have one -->
+        <a class="btn btn-accent"
+           href="https://www.amazon.co.uk/s?k=organic+chia+seeds&tag=contentwrit05-21"
+           target="_blank" rel="noopener sponsored nofollow">Buy on Amazon</a>
+        <a class="btn" href="/shop.html" style="margin-left:.5rem;">← Back to Pantry</a>
+      </p>
+
+      <p style="font-size:.9rem;color:#666;margin-top:.5rem;">
+        As an Amazon Associate, we earn from qualifying purchases.
+      </p>
+    </article>
   </div>
+</main>
+
+<footer class="container container--narrow">
+  <p>© 2025 Grandma’s Kitchen • All rights reserved</p>
+</footer>
+
 </body>
 </html>
-
