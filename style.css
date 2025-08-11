@@ -13,7 +13,12 @@
   text-align: center;
   margin: 0 0 .75rem;
 }
-
+/* Center the intro line on the Shop page */
+.container--narrow .lead{
+  text-align: center;
+  margin: .5rem auto 2rem;  /* nice spacing */
+  max-width: 68ch;          /* comfy line length */
+}
 /* Make product titles brand-green (not purple when visited */
 .card h3 a{ color: var(--olive); text-decoration: none; }
 .card h3 a:hover{ text-decoration: underline; }
@@ -25,7 +30,6 @@ main h2{
   margin: 2rem auto 1rem;   /* centers it */
   text-align: center;
 }
-
 /*Make cards equal height; keep button at the bottom */
 .card{ display:flex; flex-direction:column; }
 .card .btn{ margin-top:auto; }
