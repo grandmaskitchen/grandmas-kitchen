@@ -1,0 +1,30 @@
+About Template
+
+<!DOCTYPE html><html lang="en"><head>
+    <meta charset="UTF-8"><title>About Grandma</title>
+    <link rel="stylesheet" href="style.css"></head><body>
+    
+<header>
+    <img src="logo.png" alt="Grandma’s Kitchen Logo" style="max-height: 100px; margin-bottom: 1rem;">
+    <h1>Grandma’s Kitchen</h1>
+    <nav>
+        <a href="index.html">Home</a> |
+        <a href="about.html">About</a> |
+        <a href="recipes.html">Recipes</a> |
+        <a href="shop.html">Shop</a>
+    </nav>
+    <p>Simple food. Lifelong health. Inspired by a 104-year legacy.</p>
+</header>
+
+    <main>
+        <section>
+            <h2>Meet Grandma Lillian</h2>
+            <p>Lillian was born in 1904 and lived to 104 years old. She grew up learning to cook from her mother and grandmother, survived two world wars, and raised a family through frugality, home-grown food, and traditional values.</p>
+            <p>This site is inspired by her legacy, to help modern families rediscover the timeless habits that truly nourish us.</p>
+        </section>
+    </main>
+<footer>
+    <p><em>“My Nan, Lillian, lived to 104 eating home-cooked meals every day. This site is my way of sharing her wisdom.” – Gary</em></p>
+    <p>&copy; 2025 Grandma’s Kitchen • All rights reserved</p>
+</footer>
+</body></html>
