@@ -2,31 +2,68 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Grandma's Pantry – Shop</title>
-  <link rel="stylesheet" href="style.css" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Grandma’s Pantry • Shop</title>
+  <link rel="stylesheet" href="/style.css" />
 </head>
 <body>
-  <h1><center>🛒 Grandma's Pantry</center></h1>
-  <div style="max-width: 900px; margin: 0 auto; display: flex; flex-wrap: wrap; gap: 2rem; justify-content: center;">
 
-    <!-- ACV Product Card -->
-    <div style="width: 250px; background: #fdfdf9; padding: 1rem; border: 1px solid #ccc; border-radius: 10px;">
-      <img src="https://m.media-amazon.com/images/I/713+vatU3qL._AC_SL1500_.jpg" alt="Apple Cider Vinegar" style="max-width: 100%; border-radius: 6px;" />
-      <h3>Apple Cider Vinegar</h3>
-      <p>Natural, raw, and unfiltered – a favourite of traditional remedies.</p>
-      <a href="products/product-acv.html">View Product</a>
-    </div>
+<header class="container center">
+  <a href="/index.html">
+    <img src="/images/logo.jpg" alt="Grandma’s Kitchen Logo" style="max-height:100px;margin-bottom:1rem;">
+  </a>
+  <nav aria-label="Primary">
+    <a href="/index.html">Home</a>
+    <a href="/about.html">About</a>
+    <a href="/recipes.html">Recipes</a>
+    <a href="/shop.html" aria-current="page">Shop</a>
+  </nav>
+  <p>Simple food. Lifelong health. Inspired by a 104-year legacy.</p>
+</header>
 
-    <!-- Chia Product Card -->
-    <div style="width: 250px; background: #fdfdf9; padding: 1rem; border: 1px solid #ccc; border-radius: 10px;">
-      <img src="https://m.media-amazon.com/images/I/71Shyvn77oL._AC_SL1500_.jpg" alt="Chia Seeds" style="max-width: 100%; border-radius: 6px;" />
-      <h3>Organic Chia Seeds</h3>
-      <p>High in fibre and omega-3. A gluten-free superfood from the pantry.</p>
-      <a href="products/product-chia.html">View Product</a>
-    </div>
-
+<main>
+  <div class="container container--narrow">
+    <h1>🛒 Grandma’s Pantry</h1>
+    <p class="lead">Staples we actually use at home—simple, honest ingredients.</p>
   </div>
+
+  <div class="container">
+    <div class="grid grid-2">
+
+      <!-- ACV Product -->
+      <article class="card" aria-labelledby="prod-acv-title">
+        <a class="product-image" href="products/product-acv.html">
+          <img src="https://m.media-amazon.com/images/I/713+vatU3qL._AC_SL1500_.jpg"
+               alt="Raw, unfiltered Apple Cider Vinegar bottle">
+        </a>
+        <h3 id="prod-acv-title" class="product-title">
+          <a href="products/product-acv.html">Apple Cider Vinegar</a>
+        </h3>
+        <p>Natural, raw, unfiltered—great for dressings and daily tonics.</p>
+        <p><a class="btn" href="products/product-acv.html">View product</a></p>
+      </article>
+
+      <!-- Chia Product -->
+      <article class="card" aria-labelledby="prod-chia-title">
+        <a class="product-image" href="products/product-chia.html">
+          <img src="https://m.media-amazon.com/images/I/71Shyvn77oL._AC_SL1500_.jpg"
+               alt="Organic Chia Seeds pouch">
+        </a>
+        <h3 id="prod-chia-title" class="product-title">
+          <a href="products/product-chia.html">Organic Chia Seeds</a>
+        </h3>
+        <p>High in fibre and omega-3s—perfect for puddings, porridge, and baking.</p>
+        <p><a class="btn" href="products/product-chia.html">View product</a></p>
+      </article>
+
+    </div>
+  </div>
+</main>
+
+<footer class="container container--narrow">
+  <p>© 2025 Grandma’s Kitchen • All rights reserved</p>
+</footer>
 
 </body>
 </html>
+
