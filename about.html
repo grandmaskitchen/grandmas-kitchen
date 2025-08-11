@@ -3,48 +3,49 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Grandma’s Kitchen</title>
-  <!-- Always load the CSS from the site root -->
+  <title>About • Grandma’s Kitchen</title>
   <link rel="preload" href="/style.css" as="style">
-<link rel="stylesheet" href="/style.css">
+  <link rel="stylesheet" href="/style.css">
 </head>
 <body>
-<header>
-  <!-- Point to the real logo location -->
-  <header class="container center">
-    <a href="/index.html">
-      <img src="/images/logo.jpg" alt="Grandma’s Kitchen Logo" style="max-height:100px;margin-bottom:1rem;">
-    </a>
-  </header>
-    <nav>
-        <a href="index.html">Home</a> |
-        <a href="about.html">About</a> |
-        <a href="recipes.html">Recipes</a> |
-        <a href="shop.html">Shop</a>
-    </nav>
-    <p>Simple food. Lifelong health. Inspired by a 104-year legacy.</p>
+
+<header class="container center">
+  <a href="/index.html">
+    <img src="/images/logo.jpg" alt="Grandma’s Kitchen Logo" style="max-height:100px;margin-bottom:1rem;">
+  </a>
+  <nav class="site-nav" aria-label="Primary">
+    <a href="/index.html">Home</a>
+    <a href="/about.html" aria-current="page">About</a>
+    <a href="/recipes.html">Recipes</a>
+    <a href="/shop.html">Shop</a>
+  </nav>
+  <p>Simple food. Lifelong health. Inspired by a 104-year legacy.</p>
 </header>
 
-    <main>
-  <section aria-labelledby="grandma-heading" id="grandma-lillian">
-    <h2 id="grandma-heading">Meet Grandma Lillian</h2>
+<main>
+  <div class="container container--narrow">
+    <section id="grandma-lillian" aria-labelledby="grandma-heading">
+      <h2 id="grandma-heading">Meet Grandma Lillian</h2>
 
-    <p>
-      Lillian was born in <time datetime="1904">1904</time> and lived to 
-      <span class="nowrap">104&nbsp;years</span>. She learned to cook from her
-      mother and grandmother, survived two world wars, and raised a family
-      through frugality, home-grown food, and traditional values.
-    </p>
+      <p>
+        Lillian was born in <time datetime="1904">1904</time> and lived to
+        <span class="nowrap">104&nbsp;years</span>. She learned to cook from her
+        mother and grandmother, survived two world wars, and raised a family
+        through frugality, home-grown food, and traditional values.
+      </p>
 
-    <p>
-      Her legacy inspires this site—helping modern families rediscover
-      the timeless habits that truly nourish us.
-    </p>
-  </section>
+      <p>
+        Her legacy inspires this site—helping modern families rediscover the
+        timeless habits that truly nourish us.
+      </p>
+    </section>
+  </div>
 </main>
 
-<footer>
-    <p><em><a>“My Nan, Lillian, lived to 104, eating home-cooked meals every day. This site is my way of sharing her wisdom.” – Gary</a></em></p>
-    <p>&copy; 2025 Grandma’s Kitchen • All rights reserved</p>
+<footer class="container container--narrow">
+  <p><em>“My Nan, Lillian, lived to 104, eating home-cooked meals every day. This site is my way of sharing her wisdom.” — Gary</em></p>
+  <p>© 2025 Grandma’s Kitchen • All rights reserved</p>
 </footer>
-</body></html>
+
+</body>
+</html>
