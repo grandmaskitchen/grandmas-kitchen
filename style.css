@@ -13,6 +13,12 @@
   text-align: center;
   margin: 0 0 .75rem;
 }
+/* Product image itself — mobile-safe */
+.product-image img{
+  width: 100%;     /* was max-width */
+  height: 100%;    /* add this */
+  object-fit: contain;
+}
 /* Center the intro line on the Shop page */
 .container--narrow .lead{
   text-align: center;
