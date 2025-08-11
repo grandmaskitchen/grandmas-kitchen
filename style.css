@@ -4,6 +4,9 @@
   --olive:#3f5f3b; --olive-600:#345232; --accent:#e77a57;
   --radius:16px;
 }
+.card h3 a{ color: var(--olive); text-decoration: none; }
+.card h3 a:hover{ text-decoration: underline; }
+.card h3 a:visited{ color: var(--olive); }
 
 /* Centre the section title and keep the same line length as the body text */
 main h2{
