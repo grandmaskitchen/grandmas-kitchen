@@ -2,8 +2,9 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Add Product to Grandma's Kitchen</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Add Product • Grandma's Kitchen (Admin)</title>
+  <meta name="robots" content="noindex, nofollow" />
   <style>
     body { font-family: Arial, sans-serif; background: #fffdf8; color: #333; padding: 1rem; margin: 0; }
     h1 { text-align: center; font-size: 1.5rem; margin-bottom: 1rem; }
@@ -12,44 +13,33 @@
     input, textarea, select { width: 100%; padding: 0.6rem; border: 1px solid #ccc; border-radius: 4px; font-size: 1rem; box-sizing: border-box; }
     button { background-color: #44633f; color: #fff; padding: 0.75rem; border: none; border-radius: 5px; cursor: pointer; font-size: 1rem; }
     button:hover { background-color: #2e472b; }
-    #preview { background: #f4f4f4; padding: 1rem; border-radius: 6px; margin-top: 2rem; display: none; }
+    #preview { background: #f4f4f4; padding: 1rem; border-radius: 6px; margin-top: 2rem; display: none; max-width: 600px; margin-inline: auto; }
     img { max-width: 100%; height: auto; border-radius: 4px; margin-top: 0.5rem; }
-    @media (max-width: 600px) {
-      body { padding: 1rem; }
-      form { padding: 1rem; }
-      h1 { font-size: 1.25rem; }
-    }
+    @media (max-width: 600px) { body { padding: 1rem; } form { padding: 1rem; } h1 { font-size: 1.25rem; } }
   </style>
 </head>
 <body>
   <h1>📦 Add a New Product</h1>
 
-  <form id="loginForm">
-    <label>Username</label>
-    <input type="text" id="username" required />
-    <label>Password</label>
-    <input type="password" id="password" required />
-    <button type="submit">Login</button>
-  </form>
-
-  <form id="productForm" style="display:none">
-    <label>Manufacturer Category</label>
-    <input name="manufacturer_category" required />
+  <!-- No client-side login; Cloudflare Access protects this URL -->
+  <form id="productForm" autocomplete="off">
+    <label>Manufacturer</label>
+    <input name="manufacturer" required />
 
     <label>My Product #</label>
-    <input name="product_number" required />
+    <input name="product_num" required />
 
     <label>Affiliate Link (Amazon)</label>
-    <input name="affiliate_link" type="url" required />
+    <input name="affiliate_link" type="url" required placeholder="https://amzn.to/... or https://www.amazon.co.uk/..." />
 
     <label>Amazon Title</label>
     <input name="amazon_title" />
 
     <label>Amazon Description</label>
-    <textarea name="amazon_description"></textarea>
+    <textarea name="amazon_desc"></textarea>
 
     <label>My Title</label>
-    <input name="my_title" />
+    <input name="my_title" required />
 
     <label>My Subtitle</label>
     <input name="my_subtitle" />
@@ -61,9 +51,9 @@
     <textarea name="my_description_long"></textarea>
 
     <label>Main Image URL</label>
-    <input name="image_main" type="url" />
+    <input name="image_main" type="url" required placeholder="https://..." />
 
-    <label>Small Image URL (3x3cm)</label>
+    <label>Small Image URL (3×3cm)</label>
     <input name="image_small" type="url" />
 
     <label>Extra Image 1 URL</label>
@@ -82,8 +72,8 @@
       <option value="unpaid">Unpaid</option>
     </select>
 
-    <label>Added By</label>
-    <input name="added_by" />
+    <label>Added By (optional — will be set from your Access email)</label>
+    <input name="added_by" placeholder="leave blank" />
 
     <label>Amazon Category</label>
     <input name="amazon_category" />
@@ -96,16 +86,69 @@
       <option value="liquid">Liquid</option>
     </select>
 
-    <label>Commission Info</label>
-    <input name="commission" placeholder="e.g. 2% Amazon rate" />
+    <label>Commission %</label>
+    <input name="commission_l" type="number" step="0.01" placeholder="e.g. 2" />
 
-    <label>Upload Main Image</label>
-    <input type="file" name="upload_main_image" accept="image/*" />
+    <label style="display:flex;align-items:center;gap:.5rem;">
+      <input type="checkbox" name="approved" value="true" />
+      Mark as approved
+    </label>
 
     <button type="submit">Submit Product</button>
   </form>
 
   <div id="preview"></div>
 
-  </body>
+  <script type="module">
+    const form = document.getElementById('productForm');
+    const preview = document.getElementById('preview');
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+
+      const fd = new FormData(form);
+      const data = Object.fromEntries(fd.entries());
+      // Coerce checkbox & number
+      data.approved = fd.get('approved') ? true : false;
+      if (data.commission_l !== '' && data.commission_l != null)
+        data.commission_l = Number(data.commission_l);
+
+      // Basic validation
+      if (!data.my_title?.trim()) return alert('Title is required');
+      try { new URL(data.image_main); } catch { return alert('Main Image URL is invalid'); }
+      if (data.affiliate_link && !/^(https?:\/\/)(amzn\.to|www\.amazon\.)/i.test(data.affiliate_link))
+        return alert('Affiliate link must be an Amazon URL');
+
+      const res = await fetch('/api/products', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+      });
+
+      if (!res.ok) {
+        const err = await res.text();
+        console.error(err);
+        return alert('❌ Failed to add product.');
+      }
+
+      const result = await res.json();
+      const row = result?.product || data;
+
+      // Safe preview
+      preview.replaceChildren();
+      const h = document.createElement('h3'); h.textContent = '✅ Product Preview';
+      const t = document.createElement('p');
+      const strong = document.createElement('strong'); strong.textContent = row.my_title || '';
+      const br = document.createElement('br');
+      const em = document.createElement('em'); em.textContent = row.my_subtitle || '';
+      t.append(strong, br, em);
+      const img = document.createElement('img'); img.src = row.image_main; img.alt = 'Preview';
+      const p = document.createElement('p'); p.textContent = row.my_description_short || '';
+      preview.append(h, t, img, p);
+      preview.style.display = 'block';
+
+      form.reset();
+    });
+  </script>
+</body>
 </html>
