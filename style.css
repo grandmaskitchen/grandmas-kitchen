@@ -4,7 +4,7 @@
   --olive:#3f5f3b; --olive-600:#345232; --accent:#e77a57;
   --radius:16px;
 }
-/* Detail page title */
+/* [PRODUCT TITLE DECORATION] Detail page title */
 .product-title--detail{
   font-weight:800;
   font-size:clamp(2.2rem, 4vw, 3.5rem);
@@ -13,80 +13,95 @@
   text-align:center;
   margin:0 0 .75rem;
 }
-/* Product image itself — mobile-safe */
+/* [PRODUCT IMAGE] Product image itself — mobile-safe */
 .product-image img{
   width: 100%;     /* was max-width */
   height: 100%;    /* add this */
   object-fit: contain;
-}
-/* Center the intro line on the Shop page */
+
+/* CONTAINERS */
+/* [CONTAINER] Centre the intro line on the Shop page */
 .container--narrow .lead{
-  text-align: center;
+  text-align: centre;
   margin: .5rem auto 2rem;  /* nice spacing */
   max-width: 68ch;          /* comfy line length */
 }
-/* Make product titles brand-green (not purple when visited */
+/* [CONTAINER LAYOUT] ---- Layout ---- */
+.container{ width:min(100% - 2rem, 1100px); margin-inline:auto; padding:24px; }
+.container--narrow{ width:min(100% - 2rem, 68ch); }
+}
+/* HEADINGS */
+/* [H1 CENTRE] Center the section title + match text width */
+main h1{ max-width:68ch; margin:2rem auto 0; text-align:center; }  
+}
+/* [H2 CENTRE] Centre the section title and keep the same line length as the body text */
+main h2{max-width: 68ch; margin: 2rem auto 1rem; text-align: center; }
+}
+/* [H3 DECORATION] Make product titles brand-green (not purple when visited) */
 .card h3 a{ color: var(--olive); text-decoration: none; }
 .card h3 a:hover{ text-decoration: underline; }
 .card h3 a:visited{ color: var(--olive); }
-
-/* Centre the section title and keep the same line length as the body text */
-main h2{
-  max-width: 68ch;
-  margin: 2rem auto 1rem;   /* centers it */
-  text-align: center;
 }
-/* Equal-height cards + bottom-aligned buttons */
+/* [HEADINGS] Font Size, Colour and Margins */
+h1{ font-size:clamp(2.2rem,4vw,3.5rem); color:var(--olive); margin:24px 0 8px; }
+h2{ font-size:clamp(1.6rem,3vw,2.4rem); color:var(--olive); margin:24px 0 12px; }
+h3{ font-size:clamp(1.2rem,2.4vw,1.6rem); color:#3a3a3a; letter-spacing:.02em; }
+}
+/* CARDS */
+/* [CARD HEIGHT] Equal-height cards + bottom-aligned buttons */
 .grid { align-items: stretch; }                 /* ensure cards stretch in the grid */
 .grid-2 > .card { display: flex; flex-direction: column; }
-
+}
+/* [CARD BUTTONS] Cards push button to bottom, remove gap differences */
 .card p:last-child{
   margin-top: auto;    /* push the button block to the bottom */
   margin-bottom: 0;    /* remove extra bottom gap differences */
 }
-/*Make cards equal height; keep button at the bottom */
+/* [CARD HEIGHT] Make cards equal height; keep button at the bottom */
 .card{ display:flex; flex-direction:column; }
-.card .btn{ margin-top:auto; }
-
-/* Center the section title + match text width */
-main h1{ max-width:68ch; margin:2rem auto 0; text-align:center; }
-
-/* Subtle card hover (nice touch) */
+}
+/* [CARD HOVER] Subtle card hover (nice touch) */
 .card{ transition: transform .12s ease, box-shadow .12s ease; }
 .card:hover{ transform: translateY(-2px); box-shadow: 0 6px 20px rgba(0,0,0,.06); }
-
-/* Gentle spacing rhythm for content blocks */
+/* CARD TITLES */
+.card .product-title{
+  font-weight:800;
+  font-size:1.25rem;
+  margin:.75rem 0 .25rem;
+}
+/* CARD PANELS */
+.card{ background:var(--card); border:1px solid #eee; border-radius:var(--radius);
+  padding:20px; box-shadow:0 1px 0 #eee; }
+}
+/* CARD PRODUCT GRID */
+.grid{ display:grid; gap:22px; }
+.grid-2{ grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); }
+.product-title{ font-weight:800; font-size:1.25rem; margin:.75rem 0 .25rem; }
+}
+/* [CONTENT BLOCKS] Gentle spacing rhythm for content blocks */
 .flow > * + * { margin-top: 1.25rem; }
-
+}
+/* [BODY DECORATIONS] Sizing border box margin, padding, background, colour and fonts*/
 *{ box-sizing:border-box; }
 html,body{ margin:0; padding:0; background:var(--bg); color:var(--ink);
   font:16px/1.6 system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,"Helvetica Neue",Arial; }
 img{ max-width:100%; height:auto; border-radius:12px; }
-
-/* ---- Alignment: only header/footer centered, body text left ---- */
+}
+/* [HEADERS AND FOOTERS] ---- Alignment: only header/footer centered, body text left ---- */
 body{ text-align:left; }
 header, footer{ text-align:center; }
-
-/* ---- Layout ---- */
-.container{ width:min(100% - 2rem, 1100px); margin-inline:auto; padding:24px; }
-.container--narrow{ width:min(100% - 2rem, 68ch); }
-
-/* Make paragraphs comfy to read */
+}
+/* [PARAGRAPHS] Make paragraphs comfy to read */
 main p{ max-width:68ch; margin:1rem auto; text-align:left; }
-
-/* ---- Headings ---- */
-h1{ font-size:clamp(2.2rem,4vw,3.5rem); color:var(--olive); margin:24px 0 8px; }
-h2{ font-size:clamp(1.6rem,3vw,2.4rem); color:var(--olive); margin:24px 0 12px; }
-h3{ font-size:clamp(1.2rem,2.4vw,1.6rem); color:#3a3a3a; letter-spacing:.02em; }
-
-/* ---- Nav ---- */
+}
+/* [NAVIGATION] Decorations include padding, gap, justify, hover, underline, opacity and margin */
 header{ padding:18px 0; }
 nav{ display:flex; gap:.5rem 1rem; justify-content:center; flex-wrap:wrap; }
 nav a{ color:var(--olive); text-decoration:none; }
 nav a:hover{ text-decoration:underline; }
 nav a + a::before{ content:"|"; opacity:.5; margin-inline:.5rem; } /* auto separators */
-
-/* ---- Buttons ---- */
+}
+/* [BUTTONS] include display, padding, size, radius, colour, font-weight, box-shadow */
 .btn{
   display:inline-block; padding:18px 28px; border-radius:14px;
   background:var(--olive); color:#fff; font-weight:700;
@@ -95,34 +110,13 @@ nav a + a::before{ content:"|"; opacity:.5; margin-inline:.5rem; } /* auto separ
 .btn:hover{ transform:translateY(-1px); }
 .btn-lg{ font-size:1.6rem; }
 .btn-accent{ background:var(--accent); box-shadow:0 4px 0 #c86445; }
-
-/* Card titles */
-.card .product-title{
-  font-weight:800;
-  font-size:1.25rem;
-  margin:.75rem 0 .25rem;
-
-/* ---- Cards / panels ---- */
-.card{ background:var(--card); border:1px solid #eee; border-radius:var(--radius);
-  padding:20px; box-shadow:0 1px 0 #eee; }
-
-/* ---- Product grid ---- */
-.grid{ display:grid; gap:22px; }
-.grid-2{ grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); }
-.product-title{ font-weight:800; font-size:1.25rem; margin:.75rem 0 .25rem; }
-
-/* Product image wrapper */
+}
+/* PRODUCT IMAGE WRAPPER */
 .product-image{
   width:100%; max-width:200px; aspect-ratio:1/1;
   display:flex; align-items:center; justify-content:center;
   overflow:hidden; background:#fff; margin:0 auto;
 }
-
-/* Product image itself */
-.product-image img{
-  max-width:100%; max-height:100%; object-fit:contain;
-}
-
 /* Make bigger on small screens */
 @media (max-width: 600px){
   .product-image{ max-width:300px; }
@@ -136,18 +130,17 @@ nav a + a::before{ content:"|"; opacity:.5; margin-inline:.5rem; } /* auto separ
 #imageOverlay img{
   max-width:95%; max-height:95%; border-radius:10px; box-shadow:0 12px 40px rgba(0,0,0,.5);
 }
-
 /* Prevent background scroll when overlay is open */
 .no-scroll{ overflow:hidden; }
-
+}
 /* “104 years” doesn’t break across lines */
 .nowrap{ white-space:nowrap; }
-
+}
 /* ---- Logo ---- */
 header img{
   max-height:100px; width:auto; display:block; margin:0 auto;
 } /* ← close the rule */
-
+}
 /* Center all affiliate disclosures */
 main p.affiliate-note,
 footer .affiliate-note{
