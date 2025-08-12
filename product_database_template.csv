@@ -1,2 +1,1 @@
-id,created_at,amazon_title,amazon_description,affiliate_link,my_title,my_subtitle,my_description_short,my_description_long,manufacturer_category,amazon_product_category,product_type,small_picture,main_picture,additional_pictures,advertised_on,ad_location,ad_type,added_by
-,,,,,,,,,,,,,,,,,,
+id,created_at,manufacturer,product_num,affiliate_link,amazon_title,amazon_desc,my_title,my_subtitle,my_description_short,my_description_long,image_main,image_small,image_extra_1,image_extra_2,where_advertised,ad_type,added_by,amazon_category,product_type,commission_l,approved
