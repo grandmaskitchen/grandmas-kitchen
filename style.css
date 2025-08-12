@@ -57,15 +57,63 @@ nav a{ color:var(--olive); text-decoration:none; }
 nav a:hover{ text-decoration:underline; }
 nav a + a::before{ content:"|"; opacity:.5; margin-inline:.5rem; }
 
-/* ---- Buttons ---- */
+/* ==== Buttons (revamped) ====================================== */
+
+/* Base button */
 .btn{
-  display:inline-block; padding:18px 28px; border-radius:14px;
-  background:var(--olive); color:#fff; font-weight:700;
-  text-decoration:none; box-shadow:0 4px 0 var(--olive-600);
+  display:inline-flex;                /* centers text/icons nicely */
+  align-items:center;
+  justify-content:center;
+  gap:.5rem;
+  padding:14px 18px;                  /* mobile-friendly tap target */
+  min-height:44px;                    /* WCAG touch size */
+  font-weight:700;
+  font-size:1rem;
+  border-radius:14px;
+  background:var(--olive);
+  color:#fff;
+  text-decoration:none;
+  box-shadow:0 4px 0 var(--olive-600);
+  transition:transform .12s ease, box-shadow .12s ease, background-color .12s ease;
 }
 .btn:hover{ transform:translateY(-1px); }
-.btn-lg{ font-size:1.6rem; }
+.btn:active{ transform:none; box-shadow:0 2px 0 var(--olive-600); }
+/* Accessible focus ring */
+.btn:focus-visible{
+  outline:2px solid #fff;
+  outline-offset:2px;
+  box-shadow:0 0 0 4px rgba(63,95,59,.35), 0 4px 0 var(--olive-600);
+}
+/* Disable hover lift on touch devices */
+@media (hover:none){ .btn:hover{ transform:none; } }
+
+/* Variants */
 .btn-accent{ background:var(--accent); box-shadow:0 4px 0 #c86445; }
+.btn-accent:active{ box-shadow:0 2px 0 #c86445; }
+
+/* Sizes / utilities (optional) */
+.btn-lg{ font-size:1.125rem; padding:18px 26px; border-radius:16px; }
+.btn-block{ display:flex; width:100%; }
+
+/* ==== Buttons row on product pages ============================ */
+.actions{
+  display:grid;
+  grid-template-columns:repeat(2, minmax(0,1fr));  /* two side-by-side */
+  gap:12px;
+  align-items:stretch;
+  max-width:68ch;
+  margin:1rem auto 0;
+}
+.actions .btn{
+  display:flex;            /* fill the grid cell */
+  width:100%;
+  justify-content:center;
+}
+/* Very narrow phones: stack neatly */
+@media (max-width:360px){
+  .actions{ grid-template-columns:1fr; }
+}
+
 
 /* ---- Cards / panels ---- */
 .card{
