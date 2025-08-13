@@ -28,7 +28,7 @@ export async function onRequestPost(ctx) {
       "product_num",
       "affiliate_link",
       "amazon_title",
-      "amazon_descr",
+      "amazon_desc",
       "my_title",
       "my_subtitle",
       "my_description_short",
@@ -41,7 +41,7 @@ export async function onRequestPost(ctx) {
       "ad_type",
       "amazon_category",
       "product_type",
-      "commission_percentage",
+      "commission_l",
       "approved",
       "added_by",
     ];
