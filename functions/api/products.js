@@ -1,6 +1,7 @@
 // /functions/api/products.js
 // Cloudflare Pages Function — POST /api/products (no npm deps)
 
+
 export const onRequestOptions = ({ request }) =>
   new Response(null, {
     status: 204,
