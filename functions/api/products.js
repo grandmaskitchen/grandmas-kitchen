@@ -1,27 +1,35 @@
 // functions/api/products.js
-
 import { createClient } from "@supabase/supabase-js";
 
-export async function onRequestPost({ request, env }) {
-  const supabase = createClient(
-    env.SUPABASE_URL,
-    env.SUPABASE_SERVICE_ROLE_KEY,
-    { auth: { persistSession: false } }
-  );
-  // …rest of your handler…
-}
+// (optional) simple OPTIONS handler if a browser ever does a preflight
+export const onRequestOptions = ({ request }) =>
+  new Response(null, {
+    status: 204,
+    headers: {
+      "Access-Control-Allow-Origin": request.headers.get("Origin") || "*",
+      "Access-Control-Allow-Methods": "POST, OPTIONS",
+      "Access-Control-Allow-Headers": "Content-Type, Cf-Access-Jwt-Assertion, Cf-Access-Authenticated-User-Email"
+    }
+  });
 
-// incoming form JSON
+export async function onRequestPost({ request, env }) {
+  try {
+    const supabase = createClient(
+      env.SUPABASE_URL,
+      env.SUPABASE_SERVICE_ROLE_KEY,
+      { auth: { persistSession: false } }
+    );
+
     const incoming = await request.json();
 
-    // map old field names -> table column names
-    const keyMap = {
-      amazon_desc: "amazon_descr",
-      commission_l: "commission_percentage",
+    // Accept old names, write to your NEW schema names
+    const synonyms = {
+      amazon_descr: "amazon_desc",
+      commission_percentage: "commission_l"
     };
 
-    // allow-list of real DB columns
-    const allowed = [
+    // Your actual columns (post-rename)
+    const allowed = new Set([
       "manufacturer",
       "product_num",
       "affiliate_link",
@@ -39,54 +47,72 @@ export async function onRequestPost({ request, env }) {
       "ad_type",
       "amazon_category",
       "product_type",
-      "commission_l",
-      "approved",
-      "added_by",
-    ];
+      "commission_l",       // numeric
+      "approved",           // boolean
+      "added_by"
+    ]);
 
-    // normalize + pick only allowed keys
-    const payload = {};
+    // Normalize keys, drop unknowns, turn "" -> null
+    const row = {};
     for (const [k, v] of Object.entries(incoming || {})) {
-      const key = keyMap[k] ?? k;
-      if (!allowed.includes(key)) continue;
-      payload[key] = v;
+      const dest = synonyms[k] || k;
+      if (!allowed.has(dest)) continue;
+      row[dest] = v === "" ? null : v;
     }
 
-    // type coercions
-    if (payload.commission_percentage !== undefined && payload.commission_percentage !== "") {
-      payload.commission_percentage = Number(payload.commission_percentage);
-      if (Number.isNaN(payload.commission_percentage)) delete payload.commission_percentage;
+    // Types
+    if (row.commission_l != null && row.commission_l !== "") {
+      const n = Number(row.commission_l);
+      row.commission_l = Number.isFinite(n) ? n : null;
+    } else {
+      row.commission_l = null;
     }
-    payload.approved = !!payload.approved;
+    row.approved =
+      row.approved === true ||
+      row.approved === "true" ||
+      row.approved === "on" ||
+      row.approved === 1;
 
-    // if Cloudflare Access is enabled later, this header will be present:
-    const cfEmail = ctx.request.headers.get("Cf-Access-Authenticated-User-Email");
-    if (cfEmail && !payload.added_by) payload.added_by = cfEmail;
+    // Prefer Access email header for added_by, if present
+    const accessEmail =
+      request.headers.get("Cf-Access-Authenticated-User-Email") ||
+      request.headers.get("cf-access-authenticated-user-email");
+    if (accessEmail && !row.added_by) row.added_by = accessEmail;
 
-    // basic required checks that match your form
-    if (!payload.my_title?.trim()) {
-      return new Response("Missing my_title", { status: 400 });
+    // Validation (mirrors your form)
+    if (!row.my_title || !String(row.my_title).trim()) {
+      return json({ error: "my_title is required" }, 400);
     }
-    try { new URL(payload.image_main); } catch { 
-      return new Response("image_main must be a valid URL", { status: 400 });
+    try {
+      new URL(row.image_main);
+    } catch {
+      return json({ error: "image_main must be a valid URL" }, 400);
     }
-    if (payload.affiliate_link && !/^(https?:\/\/)(amzn\.to|www\.amazon\.)/i.test(payload.affiliate_link)) {
-      return new Response("affiliate_link must be an Amazon URL", { status: 400 });
+    if (
+      row.affiliate_link &&
+      !/^(https?:\/\/)(amzn\.to|www\.amazon\.)/i.test(row.affiliate_link)
+    ) {
+      return json({ error: "affiliate_link must be an Amazon URL" }, 400);
     }
 
+    // Insert and return the created row
     const { data, error } = await supabase
       .from("products")
-      .insert([payload])
+      .insert(row)
       .select("*")
       .single();
 
-    if (error) {
-      // bubble the specific DB error up to the browser for quick debugging
-      return new Response(error.message, { status: 400 });
-    }
+    if (error) return json({ error: error.message }, 400);
 
-    return Response.json({ product: data });
+    return json({ ok: true, product: data }, 201);
   } catch (err) {
-    return new Response(err?.message || "Unknown error", { status: 500 });
+    return json({ error: err?.message || "Server error" }, 500);
   }
+}
+
+function json(body, status = 200) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { "Content-Type": "application/json" }
+  });
 }
