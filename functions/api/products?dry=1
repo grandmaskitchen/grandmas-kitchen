@@ -1,0 +1,1 @@
+fetch('/api/products?dry=1', {method:'POST', headers:{'content-type':'application/json'}, body: JSON.stringify(Object.fromEntries(new FormData(document.getElementById('productForm')).entries()))}).then(r=>r.json()).then(console.log)
