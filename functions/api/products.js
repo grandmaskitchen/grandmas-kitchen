@@ -1,19 +1,17 @@
 // functions/api/products.js
 
+import { createClient } from "@supabase/supabase-js";
 
-const { createClient } = await import("https://esm.sh/@supabase/supabase-js@2");
+export async function onRequestPost({ request, env }) {
+  const supabase = createClient(
+    env.SUPABASE_URL,
+    env.SUPABASE_SERVICE_ROLE_KEY,
+    { auth: { persistSession: false } }
+  );
+  // …rest of your handler…
+}
 
-export async function onRequestPost(ctx) {
-  try {
-    const { request, env } = ctx;
-
-    const supabase = createClient(
-      env.SUPABASE_URL,
-      env.SUPABASE_SERVICE_ROLE_KEY,
-      { auth: { persistSession: false } }
-    );
-
-    // incoming form JSON
+// incoming form JSON
     const incoming = await request.json();
 
     // map old field names -> table column names
