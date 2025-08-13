@@ -1,6 +1,5 @@
 // functions/api/products.js
 
-import { createClient } from "@supabase/supabase-js";
 const { createClient } = await import("https://esm.sh/@supabase/supabase-js@2");
 
 export async function onRequestPost(ctx) {
