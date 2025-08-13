@@ -1,34 +1,28 @@
-// functions/api/products.js
-import { createClient } from "@supabase/supabase-js";
+// /functions/api/products.js
+// Cloudflare Pages Function — POST /api/products (no npm deps)
 
-// (optional) simple OPTIONS handler if a browser ever does a preflight
 export const onRequestOptions = ({ request }) =>
   new Response(null, {
     status: 204,
     headers: {
       "Access-Control-Allow-Origin": request.headers.get("Origin") || "*",
       "Access-Control-Allow-Methods": "POST, OPTIONS",
-      "Access-Control-Allow-Headers": "Content-Type, Cf-Access-Jwt-Assertion, Cf-Access-Authenticated-User-Email"
+      "Access-Control-Allow-Headers":
+        "Content-Type, Cf-Access-Jwt-Assertion, Cf-Access-Authenticated-User-Email"
     }
   });
 
-export async function onRequestPost({ request, env }) {
+export const onRequestPost = async ({ request, env }) => {
   try {
-    const supabase = createClient(
-      env.SUPABASE_URL,
-      env.SUPABASE_SERVICE_ROLE_KEY,
-      { auth: { persistSession: false } }
-    );
-
     const incoming = await request.json();
 
-    // Accept old names, write to your NEW schema names
+    // Map any old field names -> your current DB column names
     const synonyms = {
       amazon_descr: "amazon_desc",
       commission_percentage: "commission_l"
     };
 
-    // Your actual columns (post-rename)
+    // Your current Supabase columns (per your list)
     const allowed = new Set([
       "manufacturer",
       "product_num",
@@ -47,12 +41,12 @@ export async function onRequestPost({ request, env }) {
       "ad_type",
       "amazon_category",
       "product_type",
-      "commission_l",       // numeric
-      "approved",           // boolean
+      "commission_l",   // numeric
+      "approved",       // boolean
       "added_by"
     ]);
 
-    // Normalize keys, drop unknowns, turn "" -> null
+    // Normalize keys, drop unknowns, "" -> null
     const row = {};
     for (const [k, v] of Object.entries(incoming || {})) {
       const dest = synonyms[k] || k;
@@ -60,7 +54,7 @@ export async function onRequestPost({ request, env }) {
       row[dest] = v === "" ? null : v;
     }
 
-    // Types
+    // Coerce types
     if (row.commission_l != null && row.commission_l !== "") {
       const n = Number(row.commission_l);
       row.commission_l = Number.isFinite(n) ? n : null;
@@ -73,13 +67,13 @@ export async function onRequestPost({ request, env }) {
       row.approved === "on" ||
       row.approved === 1;
 
-    // Prefer Access email header for added_by, if present
+    // Prefer Cloudflare Access email header for added_by
     const accessEmail =
       request.headers.get("Cf-Access-Authenticated-User-Email") ||
       request.headers.get("cf-access-authenticated-user-email");
     if (accessEmail && !row.added_by) row.added_by = accessEmail;
 
-    // Validation (mirrors your form)
+    // Basic validation
     if (!row.my_title || !String(row.my_title).trim()) {
       return json({ error: "my_title is required" }, 400);
     }
@@ -95,23 +89,33 @@ export async function onRequestPost({ request, env }) {
       return json({ error: "affiliate_link must be an Amazon URL" }, 400);
     }
 
-    // Insert and return the created row
-    const { data, error } = await supabase
-      .from("products")
-      .insert(row)
-      .select("*")
-      .single();
+    // Insert via Supabase REST (service role key)
+    const resp = await fetch(`${env.SUPABASE_URL}/rest/v1/products`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        apikey: env.SUPABASE_SERVICE_ROLE_KEY,
+        Authorization: `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}`,
+        Prefer: "return=representation"
+      },
+      body: JSON.stringify(row)
+    });
 
-    if (error) return json({ error: error.message }, 400);
+    const out = await resp.json();
+    if (!resp.ok) {
+      // Forward helpful message
+      return json({ error: out?.message || "Insert failed", details: out }, 400);
+    }
 
-    return json({ ok: true, product: data }, 201);
+    // out is an array when Prefer:return=representation
+    return json({ ok: true, product: out?.[0] ?? null }, 201);
   } catch (err) {
     return json({ error: err?.message || "Server error" }, 500);
   }
-}
+};
 
-function json(body, status = 200) {
-  return new Response(JSON.stringify(body), {
+function json(obj, status = 200) {
+  return new Response(JSON.stringify(obj), {
     status,
     headers: { "Content-Type": "application/json" }
   });
