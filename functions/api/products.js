@@ -86,11 +86,15 @@ export const onRequestPost = async ({ request, env }) => {
       new URL(row.image_main);
     } catch {
       return json({ error: "image_main must be a valid URL" }, 400);
-    }
-    if (
-      row.affiliate_link &&
-      !/^(https?:\/\/)(amzn\.to|www\.amazon\.)/i.test(row.affiliate_link)
-    ) {
+const AMAZON_LINK_RE =
+  /^(https?:\/\/)(amzn\.to|a\.co|(?:[\w-]+\.)?amazon\.[a-z.]{2,})/i;
+
+if (row.affiliate_link && !AMAZON_LINK_RE.test(row.affiliate_link)) {
+  return json(
+    { error: "affiliate_link must be Amazon (amazon.* / amzn.to / a.co)" },
+    400
+  );
+}     
       return json({ error: "affiliate_link must be an Amazon URL" }, 400);
     }
 
