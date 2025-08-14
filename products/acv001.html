@@ -1,68 +1,97 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>🍎Apple Cider Vinegar • Grandma’s Pantry</title>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Grandma’s Kitchen • Product</title>
+  <meta name="description" content="Grandma’s Kitchen product detail." />
   <link rel="stylesheet" href="/style.css" />
   <style>
-    /* page-specific tweak: bigger square hero on the detail page */
-    .product-hero{ max-width:340px; margin:0 auto 1rem; }
-    @media (max-width:600px){ .product-hero{ max-width:320px; } }
+    .container{max-width:860px;margin:1.25rem auto;padding:0 16px}
+    .hero{display:grid;grid-template-columns:1fr 1fr;gap:18px;align-items:start}
+    .hero img{max-width:100%;border-radius:10px}
+    @media (max-width:720px){.hero{grid-template-columns:1fr}}
+    .fab{margin-top:1.25rem;padding-top:.5rem;border-top:1px solid #eee}
+    .fab h2{font-size:1.1rem;margin:.75rem 0 .4rem}
+    .fab ul{margin:.25rem 0 .75rem 1.25rem}
+    .fab li{margin:.25rem 0}
+    .muted{color:#666}
   </style>
 </head>
 <body>
+  <main class="container">
+    <a href="/shop.html" class="muted">← Back to Pantry</a>
+    <h1 id="p-title">Loading…</h1>
 
-<header class="container center">
-  <a href="/index.html">
-    <img src="/images/logo.jpg" alt="Grandma’s Kitchen Logo" style="max-height:100px;margin-bottom:1rem;">
-  </a>
-  <nav aria-label="Primary">
-    <a href="/index.html">Home</a>
-    <a href="/about.html">About</a>
-    <a href="/recipes.html">Recipes</a>
-    <a href="/shop.html" aria-current="page">Shop</a>
-  </nav>
-  <p>Simple food. Lifelong health. Inspired by a 104-year legacy.</p>
-</header>
+    <section class="hero">
+      <img id="p-image" src="" alt="" />
+      <div>
+        <p id="p-short" class="muted"></p>
 
-<main>
-  <div class="container container--narrow">
-    <article aria-labelledby="prod-title">
-      <a class="product-image product-hero">
-        <img
-          src="https://m.media-amazon.com/images/I/713+vatU3qL._AC_SL1500_.jpg"
-          alt="Raw, unfiltered apple cider vinegar bottle"
-          loading="lazy" decoding="async">
-      </a>
+        <!-- FAB -->
+        <section class="fab" aria-labelledby="fab-heading">
+          <h2 id="fab-heading">Features</h2>
+          <ul id="p-features"></ul>
 
-      <h1 id="prod-title">Apple Cider Vinegar</h1>
-      <p class="lead">Raw, unfiltered, with the live “mother” — a simple pantry staple for dressings and daily tonics.</p>
+          <h2>Advantages</h2>
+          <p id="p-advantages"></p>
 
-      <h2>Why we like it</h2>
-      <ul>
-        <li>Unfiltered & unpasteurised with the live “mother”.</li>
-        <li>Naturally fermented; clean, bright flavour.</li>
-        <li>Great in vinaigrettes or diluted in water.</li>
-        <li>Glass bottle to preserve purity.</li>
-      </ul>
-      <p>
-        <!-- Use your Associates link; include your tag -->
-        <p class="actions">
-  <a class="btn btn-accent"
-     href="https://amzn.to/4fy4lG8"
-     target="_blank" rel="noopener sponsored nofollow">Buy on Amazon</a>
-  <a class="btn" href="/shop.html">← Back to Pantry</a>
-  </p>
-      <p class="affiliate-note">As an Amazon Associate, we (Grandma's Kitchen) earn from qualifying purchases.</p>
-      <p style="font-size:.9rem;color:#666;margin-top:.5rem;">
-      </p>
-    </article>
-  </div>
-</main>
-<footer class="container container--narrow">
-  <p>© 2025 Grandma’s Kitchen • All rights reserved</p>
-  <p class="affiliate-note">As an Amazon Associate, we (Grandma's Kitchen) earn from qualifying purchases.</p>
-</footer>
+          <h2>Benefits</h2>
+          <p id="p-benefits"></p>
+        </section>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    (async function () {
+      // slug from file name: /products/acv001 or /products/acv001.html
+      let slug = location.pathname.split('/').pop() || '';
+      slug = slug.replace(/\.html$/i, '');
+
+      const setText = (id, txt) => {
+        const el = document.getElementById(id);
+        if (el) el.textContent = (txt || '').trim();
+      };
+      const setImage = (id, src, alt) => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        if (src) { el.src = src; el.alt = alt || ''; } else { el.style.display = 'none'; }
+      };
+      const toBullets = (txt) =>
+        (txt || '').split(/\r?\n/).map(s => s.trim()).filter(Boolean);
+
+      try {
+        const r = await fetch(`/api/product?slug=${encodeURIComponent(slug)}`);
+        const { product, error } = await r.json();
+        if (!r.ok || !product) throw new Error(error || 'Not found');
+
+        setText('p-title', product.my_title);
+        setImage('p-image', product.image_main, product.my_title);
+
+        // If you store a short blurb in benefits/advantages/features you can compose a one-liner here.
+        // For now we leave p-short empty or derive the first line of advantages.
+        const short = (product.advantages || '').split(/\r?\n/)[0] || '';
+        setText('p-short', short);
+
+        const feats = toBullets(product.features);
+        const ul = document.getElementById('p-features');
+        if (feats.length && ul) {
+          ul.innerHTML = feats.map(li => `<li>${li}</li>`).join('');
+        } else {
+          ul?.parentElement?.style && (ul.parentElement.style.display = 'none');
+        }
+
+        const adv = (product.advantages || '').trim();
+        const ben = (product.benefits || '').trim();
+        if (adv) setText('p-advantages', adv); else document.getElementById('p-advantages').parentElement.style.display = 'none';
+        if (ben) setText('p-benefits', ben); else document.getElementById('p-benefits').parentElement.style.display = 'none';
+      } catch (err) {
+        setText('p-title', 'Product not found');
+        document.getElementById('p-image').style.display = 'none';
+        document.querySelector('.fab').style.display = 'none';
+      }
+    })();
+  </script>
 </body>
 </html>
