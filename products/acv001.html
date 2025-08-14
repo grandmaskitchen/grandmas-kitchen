@@ -16,6 +16,11 @@
     .fab ul{margin:.25rem 0 .75rem 1.25rem}
     .fab li{margin:.25rem 0}
     .muted{color:#666}
+    .hidden{display:none}
+    .cta-block{margin-top:12px}
+    .price-row{display:flex;gap:.5rem;align-items:baseline;flex-wrap:wrap}
+    .price-row .price{font-weight:800;font-size:1.25rem}
+    .disclosure{font-size:.9rem;color:#666;margin-top:.35rem}
   </style>
 </head>
 <body>
@@ -27,6 +32,19 @@
       <img id="p-image" src="" alt="" />
       <div>
         <p id="p-short" class="muted"></p>
+
+        <!-- Price/availability + CTA -->
+        <div id="priceBlock" class="cta-block hidden" aria-live="polite">
+          <div class="price-row">
+            <span id="p-price" class="price"></span>
+            <span id="p-availability" class="muted"></span>
+          </div>
+          <div id="p-asof" class="muted" style="font-size:.9rem"></div>
+          <p class="disclosure">Ad – affiliate link. As an Amazon Associate, I earn from qualifying purchases.</p>
+          <p style="margin-top:.75rem">
+            <a id="p-buy" class="btn btn-accent" href="#" target="_blank" rel="noopener sponsored nofollow">Buy on Amazon</a>
+          </p>
+        </div>
 
         <!-- FAB -->
         <section class="fab" aria-labelledby="fab-heading">
@@ -49,47 +67,78 @@
       let slug = location.pathname.split('/').pop() || '';
       slug = slug.replace(/\.html$/i, '');
 
-      const setText = (id, txt) => {
-        const el = document.getElementById(id);
-        if (el) el.textContent = (txt || '').trim();
-      };
+      const $ = (id) => document.getElementById(id);
+      const setText = (id, txt) => { const el = $(id); if (el) el.textContent = (txt || '').trim(); };
       const setImage = (id, src, alt) => {
-        const el = document.getElementById(id);
+        const el = $(id);
         if (!el) return;
         if (src) { el.src = src; el.alt = alt || ''; } else { el.style.display = 'none'; }
       };
-      const toBullets = (txt) =>
-        (txt || '').split(/\r?\n/).map(s => s.trim()).filter(Boolean);
+      const toBullets = (txt) => (txt || '').split(/\r?\n/).map(s => s.trim()).filter(Boolean);
+
+      // crude locale -> UK/US for PA-API host selection on the server
+      const isUS = (Intl.DateTimeFormat().resolvedOptions().locale || '').includes('-US');
+      const country = isUS ? 'US' : 'UK';
 
       try {
-        const r = await fetch(`/api/product?slug=${encodeURIComponent(slug)}`);
-        const { product, error } = await r.json();
+        const r = await fetch(`/api/product?slug=${encodeURIComponent(slug)}&country=${country}`);
+        const { product, amazon, error } = await r.json();
         if (!r.ok || !product) throw new Error(error || 'Not found');
 
-        setText('p-title', product.my_title);
-        setImage('p-image', product.image_main, product.my_title);
+        // Title & image
+        setText('p-title', product.my_title || product.amazon_title || 'Product');
+        setImage('p-image', product.image_main, product.my_title || product.amazon_title || '');
 
-        // If you store a short blurb in benefits/advantages/features you can compose a one-liner here.
-        // For now we leave p-short empty or derive the first line of advantages.
+        // Short blurb: first line of advantages, if any
         const short = (product.advantages || '').split(/\r?\n/)[0] || '';
         setText('p-short', short);
 
+        // FAB
         const feats = toBullets(product.features);
-        const ul = document.getElementById('p-features');
+        const ul = $('p-features');
         if (feats.length && ul) {
           ul.innerHTML = feats.map(li => `<li>${li}</li>`).join('');
         } else {
           ul?.parentElement?.style && (ul.parentElement.style.display = 'none');
         }
-
         const adv = (product.advantages || '').trim();
         const ben = (product.benefits || '').trim();
-        if (adv) setText('p-advantages', adv); else document.getElementById('p-advantages').parentElement.style.display = 'none';
-        if (ben) setText('p-benefits', ben); else document.getElementById('p-benefits').parentElement.style.display = 'none';
+        if (adv) setText('p-advantages', adv); else $('p-advantages')?.parentElement && ($('p-advantages').parentElement.style.display = 'none');
+        if (ben) setText('p-benefits', ben); else $('p-benefits')?.parentElement && ($('p-benefits').parentElement.style.display = 'none');
+
+        // CTA link (always use your affiliate_link if present)
+        if (product.affiliate_link) {
+          const buy = $('p-buy');
+          if (buy) buy.href = product.affiliate_link;
+        } else {
+          $('p-buy')?.parentElement && ($('p-buy').parentElement.style.display = 'none');
+        }
+
+        // PA-API price/availability block (only if server returned it)
+        if (amazon && (amazon.price || amazon.availability)) {
+          if (amazon.price) setText('p-price', amazon.price);
+          if (amazon.availability) setText('p-availability', amazon.availability);
+          if (amazon.as_of) {
+            const d = new Date(amazon.as_of);
+            setText('p-asof', `As of ${d.toLocaleString()}`);
+          }
+          $('priceBlock')?.classList.remove('hidden');
+        } else {
+          // hide price block if no PA-API data (still show CTA/disclosure if you want)
+          // Here, we keep the CTA even if price data is absent:
+          $('p-price') && ($('p-price').textContent = '');
+          $('p-availability') && ($('p-availability').textContent = '');
+          $('p-asof') && ($('p-asof').textContent = '');
+          // If you prefer to hide entire block when no price, uncomment next line:
+          // $('priceBlock')?.classList.add('hidden');
+          // Or keep it visible as a pure CTA with disclosure:
+          $('priceBlock')?.classList.remove('hidden');
+        }
       } catch (err) {
         setText('p-title', 'Product not found');
-        document.getElementById('p-image').style.display = 'none';
+        $('p-image').style.display = 'none';
         document.querySelector('.fab').style.display = 'none';
+        $('priceBlock')?.classList.add('hidden');
       }
     })();
   </script>
