@@ -1,115 +1,117 @@
-// /functions/api/amazon-fetch.js
+// functions/api/amazon-fetch.js
+// POST /api/amazon-fetch  { input: "<amzn.to|amazon url|ASIN>" }
 
-export const onRequestOptions = ({ request }) =>
-  new Response(null, {
-    status: 204,
-    headers: {
-      "Access-Control-Allow-Origin": request.headers.get("Origin") || "*",
-      "Access-Control-Allow-Methods": "POST, OPTIONS",
-      "Access-Control-Allow-Headers": "Content-Type"
-    }
-  });
+export const onRequestGet = () =>
+  json({ ok: true, message: "amazon-fetch live" });
 
 export const onRequestPost = async ({ request }) => {
   try {
-    const ct = request.headers.get("content-type") || "";
-    if (!ct.includes("application/json")) {
-      return json({ error: "Content-Type must be application/json" }, 415);
+    const { input } = await request.json().catch(() => ({}));
+    if (!input || typeof input !== "string") {
+      return jsonErr("Missing 'input' (Amazon URL, amzn.to link, or ASIN).", 400);
     }
 
-    const { urlOrAsin } = await request.json();
-    if (!urlOrAsin) return json({ error: "Missing urlOrAsin" }, 400);
+    // 1) resolve to a full amazon.* URL
+    const resolvedUrl = await resolveInputToAmazonUrl(input.trim());
+    if (!resolvedUrl) return jsonErr("Could not resolve to an Amazon product URL.", 400);
 
-    // Normalise: accept full URL, amzn.to, or raw ASIN
-    const productUrl = normaliseInput(urlOrAsin);
+    // 2) fetch HTML with a desktop UA (Amazon blocks default fetch UA)
+    const html = await fetchHtml(resolvedUrl);
+    if (!html) return jsonErr("Amazon blocked the request (no HTML). Try the full amazon.* URL.", 502);
 
-    // Fetch the page (basic, non-PA-API approach)
-    const res = await fetch(productUrl, {
-      redirect: "follow",
-      headers: {
-        // Spoof a browser-ish UA so Amazon returns the full page
-        "User-Agent":
-          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
-          "(KHTML, like Gecko) Chrome/125.0 Safari/537.36"
-      }
-    });
+    // 3) scrape a few essentials (keep it simple + robust)
+    const scraped = {
+      amazon_title: pickFirst([
+        metaContent(html, "og:title"),
+        textById(html, "productTitle"),
+      ]),
+      amazon_desc: pickFirst([
+        metaContent(html, "og:description"),
+        metaContent(html, "description"),
+      ]),
+      image_main: pickFirst([
+        metaContent(html, "og:image"),
+        imageFromLanding(html),
+      ]),
+      image_small: pickFirst([
+        imageFromLanding(html),
+        metaContent(html, "og:image"),
+      ]),
+      amazon_category: breadcrumb(html),
+      affiliate_link: resolvedUrl,
+    };
 
-    if (!res.ok) {
-      return json({ error: `Upstream ${res.status} ${res.statusText}` }, 502);
+    // sanity: at least a title OR image should exist
+    if (!scraped.amazon_title && !scraped.image_main) {
+      return jsonErr("Could not extract details (title/image). Paste a full Amazon product URL.", 422, { resolvedUrl });
     }
 
-    const html = await res.text();
-
-    // Very light scraping: prefer Open Graph tags
-    const getMeta = (prop) =>
-      html.match(
-        new RegExp(`<meta[^>]+property=["']${prop}["'][^>]+content=["']([^"']+)["']`, "i")
-      )?.[1];
-
-    const amazon_title = getMeta("og:title") || "";
-    const amazon_desc =
-      getMeta("og:description") ||
-      // fallback: meta name="description"
-      html.match(/<meta[^>]+name=["']description["'][^>]+content=["']([^"']+)["']/i)?.[1] ||
-      "";
-
-    // Primary image
-    let image_main =
-      getMeta("og:image") ||
-      html.match(/"hiResImage"\s*:\s*"([^"]+)"/i)?.[1] ||
-      html.match(/"large"\s*:\s*{\s*"url"\s*:\s*"([^"]+)"/i)?.[1] ||
-      "";
-
-    // Small image: try to derive from main, or leave empty
-    let image_small = image_main.replace(/\._[A-Z]{2}\d+_./, "._SL500_."); // best-effort
-
-    // Category (best-effort – varies per locale/template)
-    const amazon_category =
-      html.match(/"itemTypeKeyword"\s*:\s*"([^"]+)"/i)?.[1] ||
-      html.match(/<a[^>]+class=["'][^"']*a-link-normal a-color-tertiary[^"']*["'][^>]*>([^<]+)</i)?.[1] ||
-      "";
-
-    return json({
-      scraped: {
-        amazon_title,
-        amazon_desc,
-        image_main,
-        image_small,
-        amazon_category,
-        affiliate_link: productUrl
-      }
-    });
-  } catch (err) {
-    return json({ error: err?.message || "Server error" }, 500);
+    return json({ ok: true, scraped, resolvedUrl });
+  } catch (e) {
+    return jsonErr(e?.message || "Server error", 500);
   }
 };
 
-function json(obj, status = 200) {
-  return new Response(JSON.stringify(obj), {
+// ---------- helpers
+
+function json(body, status = 200) {
+  return new Response(JSON.stringify(body), {
     status,
-    headers: { "Content-Type": "application/json" }
+    headers: { "Content-Type": "application/json" },
   });
 }
-
-function normaliseInput(input) {
-  const t = input.trim();
-
-  // amzn.to short links → leave as-is (CF will follow redirects)
-  if (/^https?:\/\/(www\.)?amzn\.to\//i.test(t)) return t;
-
-  // Full amazon.* product URLs → leave as-is
-  if (/^https?:\/\/(www\.)?amazon\./i.test(t)) return t;
-
-  // Raw ASIN → convert to amazon.co.uk detail URL (adjust domain if needed)
-  if (/^[A-Z0-9]{10}$/i.test(t)) {
-    return `https://www.amazon.co.uk/dp/${t}`;
-  }
-
-  // last resort, just try it as a URL
-  try {
-    new URL(t);
-    return t;
-  } catch {
-    throw new Error("Input is neither a valid URL nor an ASIN");
-  }
+function jsonErr(message, status = 400, extra = {}) {
+  return json({ ok: false, error: { message }, ...extra }, status);
 }
+
+async function resolveInputToAmazonUrl(raw) {
+  const ASIN = raw.match(/\b([A-Z0-9]{10})\b/i)?.[1];
+  if (ASIN && !/amazon\./i.test(raw)) {
+    // no domain given → default to .co.uk (change if you prefer .com)
+    return `https://www.amazon.co.uk/dp/${ASIN}`;
+  }
+
+  if (/amzn\.to/i.test(raw)) {
+    // follow the short-link redirect WITHOUT auto-follow so we can read Location
+    const r = await fetch(raw, { redirect: "manual" });
+    const loc = r.headers.get("location");
+    if (loc && /amazon\./i.test(loc)) return loc;
+    // some edges auto-follow; if so, just trust the input
+  }
+
+  if (/amazon\./i.test(raw)) return raw;
+
+  return null;
+}
+
+async function fetchHtml(url) {
+  const r = await fetch(url, {
+    headers: {
+      "User-Agent":
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36",
+      "Accept-Language": "en-GB,en;q=0.9",
+      "Accept": "text/html,application/xhtml+xml",
+      "Cache-Control": "no-cache",
+    },
+  });
+  if (!r.ok) return null;
+  return await r.text();
+}
+
+// --- tiny scrapers (regex-based, resilient to extra whitespace) ---
+
+function metaContent(html, propOrName) {
+  const re = new RegExp(
+    `<meta[^>]+(?:property|name)\\s*=\\s*["']${escapeRx(propOrName)}["'][^>]+content\\s*=\\s*["']([^"']+)["']`,
+    "i"
+  );
+  return html.match(re)?.[1]?.trim();
+}
+
+function textById(html, id) {
+  const re = new RegExp(`<[^>]+id=["']${escapeRx(id)}["'][^>]*>([\\s\\S]*?)<\\/[^>]+>`, "i");
+  const m = html.match(re)?.[1];
+  return m?.replace(/\s+/g, " ").trim();
+}
+
+f
