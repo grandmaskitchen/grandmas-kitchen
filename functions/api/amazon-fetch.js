@@ -1,89 +1,115 @@
-// functions/api/amazon-fetch.js
-// POST { input: "<ASIN or Amazon URL>", marketplace?: "uk" | "us" | ... }
-// Requires env.RAINFOREST_API_KEY
+// /functions/api/amazon-fetch.js
 
-export async function onRequestPost({ request, env }) {
-  if (!env.RAINFOREST_API_KEY) {
-    return new Response('Missing RAINFOREST_API_KEY', { status: 500 });
-  }
-
-  let body;
-  try { body = await request.json(); }
-  catch { return new Response('Send JSON: { "input": "<asin or url>" }', { status: 400 }); }
-
-  const raw = (body?.input || '').trim();
-  if (!raw) return new Response('Provide "input" (ASIN or Amazon URL)', { status: 400 });
-
-  const domainFromUrl = (() => {
-    try { return new URL(raw).hostname.replace(/^www\./, ''); } catch { return null; }
-  })();
-  const normDomain = (h) => {
-    if (!h) return null;
-    const m = h.match(/amazon\.[a-z.]+$/i);
-    return m ? m[0].toLowerCase() : null;
-  };
-  const mapMarket = (m) => ({
-    us: 'amazon.com', uk: 'amazon.co.uk', ca: 'amazon.ca', de: 'amazon.de',
-    fr: 'amazon.fr',  it: 'amazon.it',    es: 'amazon.es', au: 'amazon.com.au',
-    jp: 'amazon.co.jp', in: 'amazon.in',  mx: 'amazon.com.mx'
-  }[String(m || '').toLowerCase()] || null);
-
-  const amazon_domain =
-    mapMarket(body?.marketplace) || normDomain(domainFromUrl) || 'amazon.co.uk';
-
-  const base = 'https://api.rainforestapi.com/request';
-  const qs = new URLSearchParams({
-    api_key: env.RAINFOREST_API_KEY,
-    type: 'product',
-    amazon_domain
+export const onRequestOptions = ({ request }) =>
+  new Response(null, {
+    status: 204,
+    headers: {
+      "Access-Control-Allow-Origin": request.headers.get("Origin") || "*",
+      "Access-Control-Allow-Methods": "POST, OPTIONS",
+      "Access-Control-Allow-Headers": "Content-Type"
+    }
   });
 
-  if (/^https?:\/\//i.test(raw)) {
-    qs.set('url', raw);
-  } else {
-    const asin = raw.replace(/[^A-Z0-9]/gi, '').toUpperCase().slice(0, 10);
-    if (!/^[A-Z0-9]{10}$/.test(asin)) {
-      return new Response('Input does not look like a valid ASIN', { status: 400 });
+export const onRequestPost = async ({ request }) => {
+  try {
+    const ct = request.headers.get("content-type") || "";
+    if (!ct.includes("application/json")) {
+      return json({ error: "Content-Type must be application/json" }, 415);
     }
-    qs.set('asin', asin);
-  }
 
-  const rfRes = await fetch(`${base}?${qs.toString()}`);
-  const rfJson = await rfRes.json().catch(() => ({}));
-  if (!rfRes.ok) {
-    return new Response(JSON.stringify({ error: rfJson?.error || rfJson }), {
-      status: rfRes.status, headers: { 'Content-Type': 'application/json' }
+    const { urlOrAsin } = await request.json();
+    if (!urlOrAsin) return json({ error: "Missing urlOrAsin" }, 400);
+
+    // Normalise: accept full URL, amzn.to, or raw ASIN
+    const productUrl = normaliseInput(urlOrAsin);
+
+    // Fetch the page (basic, non-PA-API approach)
+    const res = await fetch(productUrl, {
+      redirect: "follow",
+      headers: {
+        // Spoof a browser-ish UA so Amazon returns the full page
+        "User-Agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
+          "(KHTML, like Gecko) Chrome/125.0 Safari/537.36"
+      }
     });
+
+    if (!res.ok) {
+      return json({ error: `Upstream ${res.status} ${res.statusText}` }, 502);
+    }
+
+    const html = await res.text();
+
+    // Very light scraping: prefer Open Graph tags
+    const getMeta = (prop) =>
+      html.match(
+        new RegExp(`<meta[^>]+property=["']${prop}["'][^>]+content=["']([^"']+)["']`, "i")
+      )?.[1];
+
+    const amazon_title = getMeta("og:title") || "";
+    const amazon_desc =
+      getMeta("og:description") ||
+      // fallback: meta name="description"
+      html.match(/<meta[^>]+name=["']description["'][^>]+content=["']([^"']+)["']/i)?.[1] ||
+      "";
+
+    // Primary image
+    let image_main =
+      getMeta("og:image") ||
+      html.match(/"hiResImage"\s*:\s*"([^"]+)"/i)?.[1] ||
+      html.match(/"large"\s*:\s*{\s*"url"\s*:\s*"([^"]+)"/i)?.[1] ||
+      "";
+
+    // Small image: try to derive from main, or leave empty
+    let image_small = image_main.replace(/\._[A-Z]{2}\d+_./, "._SL500_."); // best-effort
+
+    // Category (best-effort – varies per locale/template)
+    const amazon_category =
+      html.match(/"itemTypeKeyword"\s*:\s*"([^"]+)"/i)?.[1] ||
+      html.match(/<a[^>]+class=["'][^"']*a-link-normal a-color-tertiary[^"']*["'][^>]*>([^<]+)</i)?.[1] ||
+      "";
+
+    return json({
+      scraped: {
+        amazon_title,
+        amazon_desc,
+        image_main,
+        image_small,
+        amazon_category,
+        affiliate_link: productUrl
+      }
+    });
+  } catch (err) {
+    return json({ error: err?.message || "Server error" }, 500);
+  }
+};
+
+function json(obj, status = 200) {
+  return new Response(JSON.stringify(obj), {
+    status,
+    headers: { "Content-Type": "application/json" }
+  });
+}
+
+function normaliseInput(input) {
+  const t = input.trim();
+
+  // amzn.to short links → leave as-is (CF will follow redirects)
+  if (/^https?:\/\/(www\.)?amzn\.to\//i.test(t)) return t;
+
+  // Full amazon.* product URLs → leave as-is
+  if (/^https?:\/\/(www\.)?amazon\./i.test(t)) return t;
+
+  // Raw ASIN → convert to amazon.co.uk detail URL (adjust domain if needed)
+  if (/^[A-Z0-9]{10}$/i.test(t)) {
+    return `https://www.amazon.co.uk/dp/${t}`;
   }
 
-  const p = rfJson?.product || rfJson;
-
-  const amazon_title = p?.title || '';
-  let amazon_desc = p?.description || '';
-  if (!amazon_desc && Array.isArray(p?.feature_bullets)) {
-    amazon_desc = p.feature_bullets.join('\n');
+  // last resort, just try it as a URL
+  try {
+    new URL(t);
+    return t;
+  } catch {
+    throw new Error("Input is neither a valid URL nor an ASIN");
   }
-
-  const images = Array.isArray(p?.images) ? p.images : [];
-  const first  = p?.main_image?.link || images[0]?.link || '';
-  const second = images[1]?.link || '';
-  const third  = images[2]?.link || '';
-
-  const amazon_category =
-    (Array.isArray(p?.categories) && (p.categories.at(-1)?.name || p.categories[0]?.name)) ||
-    p?.category || '';
-
-  return new Response(JSON.stringify({
-    scraped: {
-      amazon_title,
-      amazon_desc,
-      image_main: first,
-      image_small: first,
-      image_extra_1: second,
-      image_extra_2: third,
-      amazon_category,
-      affiliate_canonical: p?.link || p?.canonical_url || ''
-    },
-    source: { amazon_domain }
-  }), { headers: { 'Content-Type': 'application/json' } });
 }
