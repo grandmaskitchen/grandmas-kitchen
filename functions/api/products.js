@@ -1,6 +1,6 @@
-// /functions/api/products.js
-// Cloudflare Pages Function — POST /api/products (no npm deps)
-
+// functions/api/products.js
+// POST /api/products  (JSON body)
+// Inserts a row into Supabase via REST using the SERVICE ROLE key (server-side only)
 
 export const onRequestOptions = ({ request }) =>
   new Response(null, {
@@ -17,13 +17,16 @@ export const onRequestPost = async ({ request, env }) => {
   try {
     const incoming = await request.json();
 
-    // Map any old field names -> your current DB column names
+    // Accept older/alternate names and normalise them to your DB columns
     const synonyms = {
       amazon_descr: "amazon_desc",
-      commission_percentage: "commission_l"
+      amazon_description: "amazon_desc",
+      commission_percentage: "commission_l",
+      commission_percent: "commission_l",
+      commission: "commission_l"
     };
 
-    // Your current Supabase columns (per your list)
+    // Your actual Supabase columns
     const allowed = new Set([
       "manufacturer",
       "product_num",
@@ -44,10 +47,10 @@ export const onRequestPost = async ({ request, env }) => {
       "product_type",
       "commission_l",   // numeric
       "approved",       // boolean
-      "added_by"
+      "added_by"        // optional; set from Access header if present
     ]);
 
-    // Normalize keys, drop unknowns, "" -> null
+    // Normalise keys, drop unknowns, "" -> null
     const row = {};
     for (const [k, v] of Object.entries(incoming || {})) {
       const dest = synonyms[k] || k;
@@ -55,26 +58,27 @@ export const onRequestPost = async ({ request, env }) => {
       row[dest] = v === "" ? null : v;
     }
 
-    // Coerce types
+    // Type coercions
     if (row.commission_l != null && row.commission_l !== "") {
       const n = Number(row.commission_l);
       row.commission_l = Number.isFinite(n) ? n : null;
     } else {
       row.commission_l = null;
     }
+
     row.approved =
       row.approved === true ||
       row.approved === "true" ||
       row.approved === "on" ||
       row.approved === 1;
 
-    // Prefer Cloudflare Access email header for added_by
+    // Prefer Cloudflare Access email header for added_by (if/when you enable Access)
     const accessEmail =
       request.headers.get("Cf-Access-Authenticated-User-Email") ||
       request.headers.get("cf-access-authenticated-user-email");
     if (accessEmail && !row.added_by) row.added_by = accessEmail;
 
-    // Basic validation
+    // Basic validation (matches your form)
     if (!row.my_title || !String(row.my_title).trim()) {
       return json({ error: "my_title is required" }, 400);
     }
@@ -104,11 +108,13 @@ export const onRequestPost = async ({ request, env }) => {
 
     const out = await resp.json();
     if (!resp.ok) {
-      // Forward helpful message
-      return json({ error: out?.message || "Insert failed", details: out }, 400);
+      return json(
+        { error: out?.message || "Insert failed", details: out },
+        400
+      );
     }
 
-    // out is an array when Prefer:return=representation
+    // Supabase returns an array when Prefer:return=representation
     return json({ ok: true, product: out?.[0] ?? null }, 201);
   } catch (err) {
     return json({ error: err?.message || "Server error" }, 500);
