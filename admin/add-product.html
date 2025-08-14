@@ -58,6 +58,16 @@
       <label for="my_description_long">Long Description</label>
       <textarea id="my_description_long" name="my_description_long" rows="5"></textarea>
 
+      <!-- ✨ FAB fields -->
+      <label for="features">Features <span class="hint">(one per line)</span></label>
+      <textarea id="features" name="features" rows="4" placeholder="• Raw & unfiltered with 'the Mother'&#10;• Vegan & non-GMO"></textarea>
+
+      <label for="advantages">Advantages</label>
+      <textarea id="advantages" name="advantages" rows="3" placeholder="Convenient capsules—no strong taste."></textarea>
+
+      <label for="benefits">Benefits</label>
+      <textarea id="benefits" name="benefits" rows="3" placeholder="Supports everyday digestion and wellness."></textarea>
+
       <!-- Images -->
       <div class="row">
         <div>
@@ -114,11 +124,10 @@
         </div>
       </div>
 
-      <!-- Backend can override with Cf-Access email -->
-      <label for="added_by">Added By (optional)</label>
+      <!-- Optional -->
+      <label for="added_by">Added By (optional; will be set from Access if present)</label>
       <input id="added_by" name="added_by" />
 
-      <!-- Misc you said you still use -->
       <label for="manufacturer">Manufacturer</label>
       <input id="manufacturer" name="manufacturer" />
 
@@ -141,7 +150,7 @@
     <div id="preview" class="wrap"></div>
   </div>
 
-  <!-- Amazon Fetch wiring -->
+  <!-- Amazon fetch wiring (unchanged) -->
   <script>
     (function () {
       const btn = document.getElementById('fetchAmazon');
@@ -149,43 +158,39 @@
       const byName = (n) => document.querySelector(`[name="${n}"]`);
 
       async function doFetch() {
-        const linkEl = document.getElementById('affiliate_link');
-        let input = (linkEl?.value || '').trim();
+        const inputEl = document.getElementById('affiliate_link');
+        let input = (inputEl?.value || '').trim();
         if (!input) {
-          input = prompt('Paste an Amazon URL, amzn.to link, or ASIN:')?.trim() || '';
+          input = prompt('Paste an Amazon URL or ASIN:') || '';
+          input = input.trim();
           if (!input) return;
-          if (linkEl) linkEl.value = input;
+          if (inputEl) inputEl.value = input;
         }
 
         statusEl.textContent = 'Fetching product details…';
         btn.disabled = true;
         try {
           const r = await fetch('/api/amazon-fetch', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ input }) // only this key
+            method:'POST',
+            headers:{ 'Content-Type':'application/json' },
+            body: JSON.stringify({ input })
           });
+          const json = await r.json();
+          if (!r.ok) throw new Error(json?.error?.message || json?.message || 'Fetch failed');
 
-          const raw = await r.text();
-          let json;
-          try { json = JSON.parse(raw); } catch { json = null; }
-          if (!r.ok) throw new Error(json?.error?.message || json?.message || raw || 'Fetch failed');
-
-          const s = (json && json.scraped) || {};
-
+          const s = json.scraped || {};
           const setIfEmpty = (name, val) => {
             if (!val) return;
             const el = byName(name);
             if (el && !el.value) el.value = val;
           };
 
-          // Fill Amazon-origin fields
-          setIfEmpty('amazon_title',   s.amazon_title);
-          setIfEmpty('amazon_desc',    s.amazon_desc);
-          setIfEmpty('image_main',     s.image_main);
-          setIfEmpty('image_small',    s.image_small || s.image_main);
-          setIfEmpty('image_extra_1',  s.image_extra_1);
-          setIfEmpty('image_extra_2',  s.image_extra_2);
+          setIfEmpty('amazon_title', s.amazon_title);
+          setIfEmpty('amazon_desc',  s.amazon_desc);
+          setIfEmpty('image_main',   s.image_main);
+          setIfEmpty('image_small',  s.image_small || s.image_main);
+          setIfEmpty('image_extra_1', s.image_extra_1);
+          setIfEmpty('image_extra_2', s.image_extra_2);
           setIfEmpty('amazon_category', s.amazon_category);
 
           // Helpful defaults for your own fields
@@ -201,12 +206,11 @@
           btn.disabled = false;
         }
       }
-
       btn?.addEventListener('click', doFetch);
     })();
   </script>
 
-  <!-- Submit to /api/products -->
+  <!-- Submit to /api/products (unchanged) -->
   <script>
     (function () {
       const form = document.getElementById('productForm');
@@ -217,7 +221,6 @@
         const fd = new FormData(form);
         const data = Object.fromEntries(fd.entries());
 
-        // coerce types expected by backend
         data.approved = !!fd.get('approved');
         if (data.commission_l !== '' && data.commission_l != null) {
           const n = Number(data.commission_l);
@@ -235,7 +238,7 @@
           const out = await res.json();
           if (!res.ok) {
             console.error(out);
-            return alert(out?.error ? '❌ ' + out.error : '❌ Insert failed');
+            return alert((out && out.error) ? '❌ ' + out.error : '❌ Insert failed');
           }
 
           const row = out.product || data;
