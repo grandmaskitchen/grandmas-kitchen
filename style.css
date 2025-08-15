@@ -169,7 +169,7 @@ nav a + a::before{ content:"|"; opacity:.5; margin-inline:.5rem; }
 .nowrap{ white-space:nowrap; }
 
 /* Logo */
-header img{ max-height:125px; width:auto; display:block; margin:0 auto; }
+header img{ max-height:150px; width:auto; display:block; margin:0 auto; }
 
 /* Affiliate disclosure */
 main p.affiliate-note,
