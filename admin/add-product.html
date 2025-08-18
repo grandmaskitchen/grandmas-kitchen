@@ -11,8 +11,8 @@
     h1{font-size:1.6rem;margin:0 0 1rem}
     form{display:grid;gap:12px;background:#fff;padding:16px;border-radius:10px;box-shadow:0 2px 8px rgba(0,0,0,.06)}
     label{font-weight:600}
-    input,select,textarea{width:100%;box-sizing:border-box;padding:.6rem;border:1px solid #cfcfcf;border-radius:8px;font-size:1rem}
-    .row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+    input,textarea{width:100%;box-sizing:border-box;padding:.6rem;border:1px solid #cfcfcf;border-radius:8px;font-size:1rem}
+    .row{display:grid;grid-template-columns:1fr auto;gap:12px}
     .actions{display:flex;gap:12px;align-items:center;margin-top:.5rem}
     .hint{font-size:.85rem;color:#666}
     button{background:#44633F;color:#fff;border:0;border-radius:8px;padding:.7rem 1rem;cursor:pointer}
@@ -26,120 +26,37 @@
     <h1>📦 Add a New Product</h1>
 
     <form id="productForm" autocomplete="off">
-      <!-- Required -->
+      <!-- Amazon link + Fetch -->
+      <label for="affiliate_link">Amazon Link or ASIN *</label>
+      <div class="row">
+        <input id="affiliate_link" name="affiliate_link" type="text" placeholder="https://amzn.to/... or https://www.amazon.co.uk/... or ASIN" required />
+        <button id="fetchAmazon" type="button" title="Fetch details from Amazon">Fetch</button>
+      </div>
+      <span id="fetchStatus" class="hint"></span>
+
+      <!-- Minimal authoring fields -->
       <label for="my_title">My Title *</label>
       <input id="my_title" name="my_title" required />
 
       <label for="image_main">Main Image URL *</label>
       <input id="image_main" name="image_main" type="url" required placeholder="https://..." />
 
-      <!-- Amazon / Affiliate -->
-      <label for="affiliate_link">Affiliate Link (Amazon)</label>
-      <div class="row" style="grid-template-columns:1fr auto">
-        <input id="affiliate_link" name="affiliate_link" type="url" placeholder="https://amzn.to/... or https://www.amazon.co.uk/..." />
-        <button id="fetchAmazon" type="button" title="Fetch details from Amazon">Fetch</button>
-      </div>
-      <span id="fetchStatus" class="hint"></span>
-
-      <!-- Optional Amazon-origin fields -->
-      <label for="amazon_title">Amazon Title</label>
-      <input id="amazon_title" name="amazon_title" />
-
-      <label for="amazon_desc">Amazon Description</label>
-      <textarea id="amazon_desc" name="amazon_desc" rows="3"></textarea>
-
-      <!-- Your content -->
-      <label for="my_subtitle">My Subtitle</label>
-      <input id="my_subtitle" name="my_subtitle" />
-
       <label for="my_description_short">Short Description</label>
       <textarea id="my_description_short" name="my_description_short" rows="2"></textarea>
 
-      <label for="my_description_long">Long Description</label>
-      <textarea id="my_description_long" name="my_description_long" rows="5"></textarea>
+      <label style="display:flex;gap:.5rem;align-items:center;">
+        <input type="checkbox" id="approved" name="approved" value="true" />
+        Approved
+      </label>
 
-      <!-- FAB -->
-      <label for="features">Features <span class="hint">(one per line)</span></label>
-      <textarea id="features" name="features" rows="4" placeholder="• Raw & unfiltered with 'the Mother'&#10;• Vegan & non-GMO"></textarea>
-
-      <label for="advantages">Advantages</label>
-      <textarea id="advantages" name="advantages" rows="3" placeholder="Convenient capsules—no strong taste."></textarea>
-
-      <label for="benefits">Benefits</label>
-      <textarea id="benefits" name="benefits" rows="3" placeholder="Supports everyday digestion and wellness."></textarea>
-
-      <!-- Images -->
-      <div class="row">
-        <div>
-          <label for="image_small">Small Image URL</label>
-          <input id="image_small" name="image_small" type="url" />
-        </div>
-        <div>
-          <label for="image_extra_1">Extra Image 1 URL</label>
-          <input id="image_extra_1" name="image_extra_1" type="url" />
-        </div>
-      </div>
-      <div class="row">
-        <div>
-          <label for="image_extra_2">Extra Image 2 URL</label>
-          <input id="image_extra_2" name="image_extra_2" type="url" />
-        </div>
-        <div>
-          <label for="amazon_category">Amazon Category</label>
-          <input id="amazon_category" name="amazon_category" />
-        </div>
-      </div>
-
-      <!-- Meta -->
-      <div class="row">
-        <div>
-          <label for="where_advertised">Where Advertised</label>
-          <input id="where_advertised" name="where_advertised" placeholder="Instagram, Facebook" />
-        </div>
-        <div>
-          <label for="ad_type">Ad Type</label>
-          <select id="ad_type" name="ad_type">
-            <option value="">—</option>
-            <option value="organic">Organic</option>
-            <option value="paid">Paid</option>
-            <option value="unpaid">Unpaid</option>
-          </select>
-        </div>
-      </div>
-
-      <div class="row">
-        <div>
-          <label for="product_type">Product Type</label>
-          <select id="product_type" name="product_type">
-            <option value="">—</option>
-            <option value="powder">Powder</option>
-            <option value="tablet">Tablet</option>
-            <option value="pill">Pill</option>
-            <option value="liquid">Liquid</option>
-          </select>
-        </div>
-        <div>
-          <label for="commission_l">Commission %</label>
-          <input id="commission_l" name="commission_l" type="number" step="0.01" placeholder="e.g. 2" />
-        </div>
-      </div>
-
-      <!-- Optional -->
-      <label for="added_by">Added By</label>
-      <input id="added_by" name="added_by" />
-
-      <label for="manufacturer">Manufacturer</label>
-      <input id="manufacturer" name="manufacturer" />
-
-      <label for="product_num">My Product #</label>
-      <input id="product_num" name="product_num" />
-
-      <div class="actions">
-        <label style="display:flex;gap:.5rem;align-items:center;">
-          <input type="checkbox" id="approved" name="approved" value="true" />
-          Approved
-        </label>
-      </div>
+      <!-- hidden fields we still store -->
+      <input type="hidden" id="amazon_title" name="amazon_title" />
+      <input type="hidden" id="amazon_desc"  name="amazon_desc" />
+      <input type="hidden" id="image_small"   name="image_small" />
+      <input type="hidden" id="image_extra_1" name="image_extra_1" />
+      <input type="hidden" id="image_extra_2" name="image_extra_2" />
+      <input type="hidden" id="amazon_category" name="amazon_category" />
+      <input type="hidden" id="product_num"  name="product_num" />
 
       <div class="actions">
         <button type="submit">Submit</button>
@@ -157,18 +74,29 @@
       const statusEl = document.getElementById('fetchStatus');
       const byName = (n) => document.querySelector(`[name="${n}"]`);
 
-      // fields to clear before each fetch so old product data doesn't linger
+      // fields we clear before each fetch so old data doesn't linger
       const FIELDS_TO_CLEAR = [
         'amazon_title','amazon_desc','image_main','image_small',
         'image_extra_1','image_extra_2','amazon_category',
-        'my_title','my_subtitle','my_description_short','my_description_long',
-        'features','advantages','benefits'
+        'my_title','my_description_short'
       ];
       function clearAutoFields() {
         FIELDS_TO_CLEAR.forEach((name) => {
           const el = byName(name);
           if (el) el.value = '';
         });
+      }
+
+      function extractASIN(s) {
+        try {
+          if (/^[A-Z0-9]{10}$/i.test(s.trim())) return s.trim().toUpperCase();
+          const u = new URL(s);
+          const m =
+            u.pathname.match(/\/dp\/([A-Z0-9]{10})/i) ||
+            u.pathname.match(/\/gp\/product\/([A-Z0-9]{10})/i) ||
+            u.search.match(/[?&]asin=([A-Z0-9]{10})/i);
+          return (m && m[1] && m[1].toUpperCase()) || '';
+        } catch { return ''; }
       }
 
       async function doFetch() {
@@ -181,9 +109,7 @@
           if (inputEl) inputEl.value = input;
         }
 
-        // reset auto-filled fields so we start clean
         clearAutoFields();
-
         statusEl.textContent = 'Fetching product details…';
         btn.disabled = true;
         try {
@@ -193,11 +119,10 @@
             body: JSON.stringify({ input })
           });
 
-          // be resilient to non-JSON error responses
+          // Accept text then try JSON to avoid “Unexpected end of JSON input”
           const text = await r.text();
           let json;
           try { json = JSON.parse(text); } catch { throw new Error(text?.slice(0,160) || 'Non-JSON response'); }
-
           if (!r.ok) throw new Error(json?.error?.message || json?.message || 'Fetch failed');
 
           const s = json.scraped || {};
@@ -207,6 +132,7 @@
             if (el && !el.value) el.value = val;
           };
 
+          // Populate fields
           setIfEmpty('amazon_title', s.amazon_title);
           setIfEmpty('amazon_desc',  s.amazon_desc);
           setIfEmpty('image_main',   s.image_main);
@@ -215,10 +141,17 @@
           setIfEmpty('image_extra_2', s.image_extra_2);
           setIfEmpty('amazon_category', s.amazon_category);
 
-          // helpful defaults for your own fields
+          // Authoring defaults
           setIfEmpty('my_title', s.amazon_title);
           const short = byName('my_description_short');
           if (short && !short.value && s.amazon_desc) short.value = s.amazon_desc.slice(0, 240);
+
+          // Normalize link & derive product_num (ASIN)
+          if (s.affiliate_link) {
+            byName('affiliate_link').value = s.affiliate_link;
+          }
+          const asin = extractASIN(byName('affiliate_link').value) || extractASIN(input);
+          if (asin) byName('product_num').value = asin.toLowerCase();
 
           statusEl.textContent = 'Filled from Amazon. Review fields, then Submit.';
         } catch (err) {
@@ -228,7 +161,6 @@
           btn.disabled = false;
         }
       }
-
       btn?.addEventListener('click', doFetch);
     })();
   </script>
@@ -244,13 +176,8 @@
         const fd = new FormData(form);
         const data = Object.fromEntries(fd.entries());
 
+        // booleans / coercions
         data.approved = !!fd.get('approved');
-        if (data.commission_l !== '' && data.commission_l != null) {
-          const n = Number(data.commission_l);
-          data.commission_l = Number.isFinite(n) ? n : null;
-        } else {
-          data.commission_l = null;
-        }
 
         try {
           const res = await fetch('/api/admin/product-upsert', {
@@ -268,7 +195,7 @@
           preview.style.display = 'block';
           preview.innerHTML = `
             <h3>✅ Product Preview</h3>
-            <p><strong>${row.my_title || ''}</strong><br><em>${row.my_subtitle || ''}</em></p>
+            <p><strong>${row.my_title || ''}</strong></p>
             ${row.image_main ? `<img src="${row.image_main}" alt="Preview" style="max-width:100%;border-radius:8px" />` : ''}
             <p>${row.my_description_short || ''}</p>
             <p><small>product_num: <code>${row.product_num || ''}</code></small></p>
