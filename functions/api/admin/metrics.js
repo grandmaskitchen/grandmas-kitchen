@@ -1,14 +1,18 @@
-// GET /api/admin/metrics
-// Returns totals and breakdown by category
-
 export const onRequestGet = async ({ env }) => {
   try {
-    // Totals (use count headers)
     const total = await countRows(env, '');
     const approved = await countRows(env, 'approved=eq.true');
     const pending = total - approved;
 
-    // Category breakdown (small datasets: fetch & group here)
+    // Last 7 / 30 days by created_at
+    const now = new Date();
+    const d7  = new Date(now.getTime() - 7 * 864e5).toISOString();
+    const d30 = new Date(now.getTime() - 30 * 864e5).toISOString();
+
+    const last7  = await countRows(env, `created_at=gte.${d7}`);
+    const last30 = await countRows(env, `created_at=gte.${d30}`);
+
+    // Category breakdown
     const r = await fetch(`${env.SUPABASE_URL}/rest/v1/products?select=amazon_category&limit=10000`, {
       headers: {
         apikey: env.SUPABASE_SERVICE_ROLE_KEY,
@@ -25,7 +29,7 @@ export const onRequestGet = async ({ env }) => {
     });
     const byCategory = [...map.entries()].map(([amazon_category, count]) => ({ amazon_category, count }));
 
-    return json({ totals: { total, approved, pending }, byCategory });
+    return json({ totals: { total, approved, pending }, added: { last7, last30 }, byCategory });
   } catch (err) {
     return json({ error: err?.message || 'Server error' }, 500);
   }
@@ -40,7 +44,6 @@ async function countRows(env, filterQuery) {
       Prefer: 'count=exact'
     }
   });
-  // PostgREST puts count in Content-Range: */<total>
   const cr = r.headers.get('Content-Range') || '';
   const m = cr.match(/\/(\d+)\s*$/);
   return m ? Number(m[1]) : 0;
