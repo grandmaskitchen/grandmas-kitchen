@@ -43,7 +43,7 @@ export const onRequestPost = async ({ request, env }) => {
       "commission_l",     // numeric
       "approved",         // boolean
       "added_by",
-      // FAB
+      // FAB (safe to accept; your Website Admin can decide when to use them)
       "features",
       "advantages",
       "benefits",
@@ -57,10 +57,18 @@ export const onRequestPost = async ({ request, env }) => {
       row[dest] = v === "" ? null : v;
     }
 
+    // --- Normalize the affiliate link (always try to ensure credit) ---
+    if (row.affiliate_link) {
+      row.affiliate_link = addTagIfMissing(row.affiliate_link, env);
+    }
+
     // Derive product_num from ASIN if not provided
     if (!row.product_num) {
-      const asin = extractASIN(row.affiliate_link) || extractASIN(row.amazon_title) || extractASIN(row.my_title);
-      if (asin) row.product_num = asin.toLowerCase(); // use ASIN as your product_num
+      const asin =
+        extractASIN(row.affiliate_link) ||
+        extractASIN(row.amazon_title) ||
+        extractASIN(row.my_title);
+      if (asin) row.product_num = asin.toUpperCase(); // keep ASIN uppercase
     }
     if (!row.product_num) {
       // Last fallback: short slug from title + timestamp tail
@@ -98,13 +106,12 @@ export const onRequestPost = async ({ request, env }) => {
     }
     if (
       row.affiliate_link &&
-      !/^(https?:\/\/)(amzn\.to|www\.amazon\.)/i.test(row.affiliate_link)
+      !/^(https?:\/\/)(amzn\.to|(?:www\.)?amazon\.)/i.test(row.affiliate_link)
     ) {
-      return json({ error: "affiliate_link must be an Amazon URL" }, 400);
+      return json({ error: "affiliate_link must be an Amazon URL (amzn.to or amazon.*)" }, 400);
     }
 
-    // Insert (not upsert) — simpler and works even if product_num is not unique yet.
-    // If later you add a UNIQUE constraint on product_num, we can switch to upsert.
+    // Insert (not upsert)
     const resp = await fetch(`${env.SUPABASE_URL}/rest/v1/products`, {
       method: "POST",
       headers: {
@@ -136,12 +143,33 @@ function json(obj, status = 200) {
   });
 }
 
-// --- helpers ---
+/* ---------------- helpers ---------------- */
+
+function addTagIfMissing(href, env) {
+  try {
+    const u = new URL(href);
+    const host = u.hostname.toLowerCase();
+
+    // leave amzn.to (or any non-Amazon) unchanged
+    if (/(^|\.)(amzn\.to)$/i.test(host)) return href;
+    if (!/amazon\./i.test(host)) return href;
+
+    // if no Associates tag, add an environment-provided one
+    if (!u.searchParams.has("tag")) {
+      const isUK = /\.co\.uk$/i.test(host);
+      const tag = isUK ? (env.AMAZON_ASSOC_TAG_UK || "") : (env.AMAZON_ASSOC_TAG_US || "");
+      if (tag) u.searchParams.set("tag", tag);
+    }
+    return u.toString();
+  } catch {
+    return href;
+  }
+}
 
 function extractASIN(s) {
   if (!s) return null;
   try {
-    // Try URL forms: /dp/B0... or /gp/product/B0...
+    // Try URL forms: /dp/B0... or /gp/product/B0... or ?asin=B0...
     const u = new URL(s, "https://x.invalid");
     const m =
       u.pathname.match(/\/dp\/([A-Z0-9]{10})/i) ||
