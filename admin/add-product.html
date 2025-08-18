@@ -157,6 +157,20 @@
       const statusEl = document.getElementById('fetchStatus');
       const byName = (n) => document.querySelector(`[name="${n}"]`);
 
+      // fields to clear before each fetch so old product data doesn't linger
+      const FIELDS_TO_CLEAR = [
+        'amazon_title','amazon_desc','image_main','image_small',
+        'image_extra_1','image_extra_2','amazon_category',
+        'my_title','my_subtitle','my_description_short','my_description_long',
+        'features','advantages','benefits'
+      ];
+      function clearAutoFields() {
+        FIELDS_TO_CLEAR.forEach((name) => {
+          const el = byName(name);
+          if (el) el.value = '';
+        });
+      }
+
       async function doFetch() {
         const inputEl = document.getElementById('affiliate_link');
         let input = (inputEl?.value || '').trim();
@@ -167,16 +181,23 @@
           if (inputEl) inputEl.value = input;
         }
 
+        // reset auto-filled fields so we start clean
+        clearAutoFields();
+
         statusEl.textContent = 'Fetching product details…';
         btn.disabled = true;
         try {
-          // NOTE: admin scope
           const r = await fetch('/api/admin/amazon-fetch', {
             method:'POST',
             headers:{ 'Content-Type':'application/json' },
             body: JSON.stringify({ input })
           });
-          const json = await r.json();
+
+          // be resilient to non-JSON error responses
+          const text = await r.text();
+          let json;
+          try { json = JSON.parse(text); } catch { throw new Error(text?.slice(0,160) || 'Non-JSON response'); }
+
           if (!r.ok) throw new Error(json?.error?.message || json?.message || 'Fetch failed');
 
           const s = json.scraped || {};
@@ -194,7 +215,7 @@
           setIfEmpty('image_extra_2', s.image_extra_2);
           setIfEmpty('amazon_category', s.amazon_category);
 
-          // Helpful defaults for your own fields
+          // helpful defaults for your own fields
           setIfEmpty('my_title', s.amazon_title);
           const short = byName('my_description_short');
           if (short && !short.value && s.amazon_desc) short.value = s.amazon_desc.slice(0, 240);
@@ -207,6 +228,7 @@
           btn.disabled = false;
         }
       }
+
       btn?.addEventListener('click', doFetch);
     })();
   </script>
