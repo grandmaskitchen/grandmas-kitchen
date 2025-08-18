@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Grandma’s Kitchen • Product</title>
+  <meta name="description" content="Grandma’s Kitchen product detail." />
+  <link rel="stylesheet" href="/style.css" />
+  <style>
+    .container{max-width:860px;margin:1.25rem auto;padding:0 16px}
+    .hero{display:grid;grid-template-columns:1fr 1fr;gap:18px;align-items:start}
+    .hero img{max-width:100%;border-radius:10px}
+    @media (max-width:720px){.hero{grid-template-columns:1fr}}
+    .fab{margin-top:1.25rem;padding-top:.5rem;border-top:1px solid #eee}
+    .fab h2{font-size:1.1rem;margin:.75rem 0 .4rem}
+    .fab ul{margin:.25rem 0 .75rem 1.25rem}
+    .fab li{margin:.25rem 0}
+    .muted{color:#666}
+    .hidden{display:none}
+    .cta-block{margin-top:12px}
+  </style>
+</head>
+<body>
+  <main class="container">
+    <a href="/shop.html" class="muted">← Back to Pantry</a>
+    <h1 id="p-title">Loading…</h1>
+
+    <section class="hero">
+      <img id="p-image" src="" alt="" />
+      <div>
+        <p id="p-short" class="muted"></p>
+
+        <div id="cta" class="cta-block hidden">
+          <p style="margin-top:.75rem">
+            <a id="p-buy" class="btn btn-accent" href="#" target="_blank" rel="noopener sponsored nofollow">Buy on Amazon</a>
+          </p>
+          <p class="affiliate-note">As an Amazon Associate, we earn from qualifying purchases.</p>
+        </div>
+
+        <!-- FAB -->
+        <section class="fab" aria-labelledby="fab-heading">
+          <h2 id="fab-heading">Features</h2>
+          <ul id="p-features"></ul>
+
+          <h2>Advantages</h2>
+          <p id="p-advantages"></p>
+
+          <h2>Benefits</h2>
+          <p id="p-benefits"></p>
+        </section>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    (async function () {
+      // slug from URL: /products/acv001 or /products/acv001.html
+      let slug = location.pathname.split('/').pop() || '';
+      slug = slug.replace(/\.html$/i, '');
+
+      const $ = (id) => document.getElementById(id);
+      const setText = (id, txt) => { const el = $(id); if (el) el.textContent = (txt || '').trim(); };
+      const setImage = (id, src, alt) => {
+        const el = $(id);
+        if (!el) return;
+        if (src) { el.src = src; el.alt = alt || ''; } else { el.style.display = 'none'; }
+      };
+      const toBullets = (txt) => (txt || '').split(/\r?\n/).map(s => s.trim()).filter(Boolean);
+
+      try {
+        const r = await fetch(`/api/product?slug=${encodeURIComponent(slug)}`);
+        const { product, error } = await r.json();
+        if (!r.ok || !product) throw new Error(error || 'Not found');
+
+        setText('p-title', product.my_title || 'Product');
+        setImage('p-image', product.image_main, product.my_title);
+
+        // Short blurb: first line of advantages or short description
+        const short =
+          (product.advantages || '').split(/\r?\n/)[0] ||
+          product.my_description_short || '';
+        setText('p-short', short);
+
+        // FAB
+        const feats = toBullets(product.features);
+        const ul = $('p-features');
+        if (feats.length && ul) {
+          ul.innerHTML = feats.map(li => `<li>${li}</li>`).join('');
+        } else {
+          ul?.parentElement?.style && (ul.parentElement.style.display = 'none');
+        }
+        const adv = (product.advantages || '').trim();
+        const ben = (product.benefits || '').trim();
+        if (adv) setText('p-advantages', adv); else $('p-advantages')?.parentElement && ($('p-advantages').parentElement.style.display = 'none');
+        if (ben) setText('p-benefits', ben); else $('p-benefits')?.parentElement && ($('p-benefits').parentElement.style.display = 'none');
+
+        // CTA
+        if (product.affiliate_link) {
+          const buy = $('p-buy'); buy.href = product.affiliate_link;
+          $('cta')?.classList.remove('hidden');
+        }
+      } catch (err) {
+        setText('p-title', 'Product not found');
+        $('p-image').style.display = 'none';
+        document.querySelector('.fab').style.display = 'none';
+        $('cta')?.classList.add('hidden');
+      }
+    })();
+  </script>
+</body>
+</html>
