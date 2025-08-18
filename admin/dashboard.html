@@ -18,16 +18,17 @@
     .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;margin:.5rem 0 1rem}
     .card{background:var(--card);border:1px solid #eee;border-radius:12px;padding:12px}
     .muted{color:var(--muted)}
-    table{width:100%;border-collapse:collapse;background:var(--card);border:1px solid #eee;border-radius:12px;overflow:hidden}
-    th,td{padding:.6rem .75rem;border-top:1px solid #f0f0f0;vertical-align:top}
-    thead th{background:#fafafa;text-align:left}
-    .row-actions{display:flex;gap:8px;flex-wrap:wrap}
     .pill{display:inline-block;padding:.15rem .5rem;border-radius:999px;background:#f2f2f2;font-size:.85rem}
     .right{margin-left:auto}
     .green{color:#1b7c3a}
     .red{color:#a62a2a}
     .img{width:54px;height:54px;border-radius:6px;object-fit:cover;background:#fafafa}
     .tablewrap{overflow:auto}
+    table{width:100%;border-collapse:collapse;background:var(--card);border:1px solid #eee;border-radius:12px;overflow:hidden}
+    th,td{padding:.6rem .75rem;border-top:1px solid #f0f0f0;vertical-align:top}
+    thead th{background:#fafafa;text-align:left}
+    .row-actions{display:flex;gap:8px;flex-wrap:wrap}
+    .section-h{display:flex;align-items:center;gap:8px;margin-top:16px}
   </style>
 </head>
 <body>
@@ -42,15 +43,41 @@
         <option value="true">Approved</option>
         <option value="false">Pending</option>
       </select>
+
       <button id="refresh" class="secondary">Refresh</button>
       <a href="/admin/add-product.html"><button type="button">➕ Add Product</button></a>
+      <button id="exportCsv" type="button" class="secondary">⬇︎ CSV Export</button>
+
       <div class="right pill" id="totalBadge">Totals</div>
     </div>
 
-    <div class="cards" id="metrics">
-      <!-- filled by JS -->
+    <!-- Metrics -->
+    <div class="cards" id="metrics"></div>
+
+    <!-- Pending approvals -->
+    <div class="section-h">
+      <h2 style="margin:.5rem 0">Pending approvals</h2>
+      <span class="muted" id="pendingCount"></span>
+    </div>
+    <div class="tablewrap" id="pendingWrap" style="display:none">
+      <table>
+        <thead>
+          <tr>
+            <th>Img</th>
+            <th>Product</th>
+            <th>Category</th>
+            <th>Slug</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="pendingRows"><tr><td class="muted" colspan="5">Loading…</td></tr></tbody>
+      </table>
     </div>
 
+    <!-- Main list -->
+    <div class="section-h">
+      <h2 style="margin:.5rem 0">All products</h2>
+    </div>
     <div class="tablewrap">
       <table>
         <thead>
@@ -75,12 +102,24 @@
   const $ = sel => document.querySelector(sel);
   const rowsEl = $('#rows'), catSel = $('#cat'), qEl = $('#q'), apprSel = $('#approved');
   const metricsEl = $('#metrics'), totalBadge = $('#totalBadge');
+  const pendingWrap = $('#pendingWrap'), pendingRows = $('#pendingRows'), pendingCount = $('#pendingCount');
 
   function esc(s){ return (s||'').replace(/[&<>"']/g,m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[m])); }
 
+  function buildParams(extra={}) {
+    const p = new URLSearchParams();
+    if (qEl.value.trim()) p.set('q', qEl.value.trim());
+    if (catSel.value) p.set('category', catSel.value);
+    if (apprSel.value) p.set('approved', apprSel.value);
+    if (extra.limit) p.set('limit', String(extra.limit));
+    if (extra.approved !== undefined) p.set('approved', String(extra.approved));
+    return p;
+  }
+
   async function loadMetrics(){
     const r = await fetch('/api/admin/metrics');
-    const { totals, byCategory } = await r.json();
+    const { totals, byCategory, added } = await r.json();
+
     totalBadge.textContent = `Total: ${totals.total} • Approved: ${totals.approved} • Pending: ${totals.pending}`;
 
     // fill categories filter (unique list)
@@ -91,15 +130,41 @@
       <div class="card"><div class="muted">Total</div><div style="font-size:1.6rem">${totals.total}</div></div>
       <div class="card"><div class="muted">Approved</div><div style="font-size:1.6rem">${totals.approved}</div></div>
       <div class="card"><div class="muted">Pending</div><div style="font-size:1.6rem">${totals.pending}</div></div>
+      <div class="card"><div class="muted">Last 7 days</div><div style="font-size:1.6rem">${added.last7}</div></div>
+      <div class="card"><div class="muted">Last 30 days</div><div style="font-size:1.6rem">${added.last30}</div></div>
       <div class="card"><div class="muted">Categories</div><div style="font-size:1.6rem">${byCategory.length}</div></div>
     `;
   }
 
+  async function loadPending(){
+    const params = buildParams({ approved: false, limit: 50 });
+    const r = await fetch('/api/admin/products-list?' + params.toString());
+    const { items } = await r.json();
+    const rows = items || [];
+    pendingCount.textContent = rows.length ? `(${rows.length})` : '(0)';
+    pendingWrap.style.display = rows.length ? '' : 'none';
+
+    if (!rows.length) { pendingRows.innerHTML = `<tr><td class="muted" colspan="5">None 🎉</td></tr>`; return; }
+
+    pendingRows.innerHTML = rows.map(p => `
+      <tr>
+        <td>${p.image_main ? `<img class="img" src="${esc(p.image_main)}" alt="">` : ''}</td>
+        <td>
+          <div>${esc(p.my_title||'')}</div>
+          ${p.my_subtitle ? `<div class="muted">${esc(p.my_subtitle)}</div>` : ''}
+        </td>
+        <td>${esc(p.amazon_category || '')}</td>
+        <td><code>${esc(p.product_num||'')}</code></td>
+        <td class="row-actions">
+          <a href="/admin/add-product.html?product_num=${encodeURIComponent(p.product_num||'')}"><button type="button">Edit</button></a>
+          <a href="/products/${encodeURIComponent(p.product_num||'')}" target="_blank"><button class="secondary" type="button">View</button></a>
+        </td>
+      </tr>
+    `).join('');
+  }
+
   async function loadList(){
-    const params = new URLSearchParams();
-    if (qEl.value.trim()) params.set('q', qEl.value.trim());
-    if (catSel.value) params.set('category', catSel.value);
-    if (apprSel.value) params.set('approved', apprSel.value);
+    const params = buildParams({});
     const r = await fetch('/api/admin/products-list?' + params.toString());
     const { items } = await r.json();
 
@@ -124,6 +189,7 @@
         </td>
         <td><code>${esc(p.product_num||'')}</code></td>
         <td class="row-actions">
+          <a href="/admin/add-product.html?product_num=${encodeURIComponent(p.product_num||'')}"><button type="button">Edit</button></a>
           <a href="/products/${encodeURIComponent(p.product_num||'')}" target="_blank"><button class="secondary" type="button">View</button></a>
           <button data-action="save" data-slug="${esc(p.product_num||'')}">Save</button>
           <button data-action="delete" data-slug="${esc(p.product_num||'')}" class="secondary">Delete</button>
@@ -132,7 +198,7 @@
     `).join('');
   }
 
-  // Save title or toggle approved or delete
+  // Save / toggle / delete
   rowsEl.addEventListener('click', async (ev) => {
     const btn = ev.target.closest('button');
     const chk = ev.target.closest('input[type="checkbox"][data-action]');
@@ -141,7 +207,7 @@
       if (!slug) return;
       if (!confirm('Delete product ' + slug + '?')) return;
       await fetch('/api/admin/product-delete?product_num=' + encodeURIComponent(slug), { method: 'DELETE' });
-      await loadMetrics(); await loadList(); return;
+      await loadMetrics(); await loadPending(); await loadList(); return;
     }
     if (btn && btn.dataset.action === 'save') {
       const slug = btn.dataset.slug;
@@ -160,16 +226,23 @@
         method:'POST', headers:{'Content-Type':'application/json'},
         body: JSON.stringify({ product_num: slug, approved: chk.checked })
       });
-      await loadMetrics(); await loadList(); return;
+      await loadMetrics(); await loadPending(); await loadList(); return;
     }
   });
 
-  $('#refresh').addEventListener('click', () => { loadMetrics(); loadList(); });
-  qEl.addEventListener('input', () => { clearTimeout(window._t); window._t=setTimeout(loadList, 250); });
-  catSel.addEventListener('change', loadList);
-  apprSel.addEventListener('change', loadList);
+  // Filters & export
+  $('#refresh').addEventListener('click', () => { loadMetrics(); loadPending(); loadList(); });
+  qEl.addEventListener('input', () => { clearTimeout(window._t); window._t=setTimeout(()=>{loadList();}, 250); });
+  catSel.addEventListener('change', () => { loadList(); });
+  apprSel.addEventListener('change', () => { loadList(); });
+
+  $('#exportCsv').addEventListener('click', () => {
+    const p = buildParams({});
+    window.location.href = '/api/admin/export-csv?' + p.toString();
+  });
 
   await loadMetrics();
+  await loadPending();
   await loadList();
 })();
 </script>
