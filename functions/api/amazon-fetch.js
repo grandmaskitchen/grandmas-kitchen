@@ -1,48 +1,63 @@
-// Cloudflare Pages Function: POST /api/amazon-fetch
-// Input JSON: { input: "<amazon url | amzn.to short link | ASIN>" }
-// Output JSON: { scraped: { amazon_title, amazon_desc, image_main, image_small, image_extra_1, image_extra_2, amazon_category, affiliate_link } }
+// Cloudflare Pages Function: /api/amazon-fetch
+// GET  /api/amazon-fetch?input=<amazon url | amzn.to | ASIN>
+// POST /api/amazon-fetch  body: { input: "<amazon url | amzn.to | ASIN>" }
+// Returns: { scraped: { amazon_title, amazon_desc, image_main, image_small, image_extra_1, image_extra_2, amazon_category, affiliate_link } }
 
 export const onRequestOptions = ({ request }) =>
   new Response(null, {
     status: 204,
     headers: {
       "Access-Control-Allow-Origin": request.headers.get("Origin") || "*",
-      "Access-Control-Allow-Methods": "POST, OPTIONS",
+      "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
       "Access-Control-Allow-Headers": "Content-Type"
     }
   });
+
+export const onRequestGet = async ({ request }) => {
+  const url = new URL(request.url);
+  const input = url.searchParams.get("input") || "";
+  if (!input) {
+    return json({ error: { message: "Provide ?input=<amazon url | amzn.to | ASIN>" } }, 400);
+  }
+  return handleFetch(input);
+};
 
 export const onRequestPost = async ({ request }) => {
   try {
     const { input } = await request.json();
     if (!input) return json({ error: { message: "Missing input" } }, 400);
+    return handleFetch(input);
+  } catch {
+    return json({ error: { message: "Invalid JSON" } }, 400);
+  }
+};
 
-    // 1) Resolve amzn.to etc. and follow redirects
+async function handleFetch(input) {
+  try {
+    // 1) Follow amzn.to redirects etc.
     const resolved = await resolveLink(input);
 
-    // 2) Extract ASIN or product URL (keep marketplace if present)
+    // 2) Extract ASIN + keep marketplace
     const { asin, url } = parseAsinOrUrl(resolved);
     if (!asin && !url) {
       return json({ error: { message: "Could not find an ASIN or product URL" } }, 400);
     }
 
-    // If raw ASIN, default to UK (change to .com if most of your products are US)
+    // Prefer the marketplace from url; fallback to UK if raw ASIN
     const finalUrl = url || `https://www.amazon.co.uk/dp/${asin}`;
 
     // 3) Fetch HTML
     const html = await fetchHtml(finalUrl);
 
-    // 4) Scrape useful fields
+    // 4) Scrape
     const scraped = scrapeAmazon(html, finalUrl);
-
-    // Add a canonical product link (client code keeps your own affiliate if you already typed one)
-    scraped.affiliate_link = finalUrl;
+    scraped.affiliate_link = finalUrl; // your form keeps your own amzn.to if already filled
 
     return json({ scraped });
   } catch (err) {
     return json({ error: { message: err?.message || "Server error" } }, 500);
   }
-};
+}
 
 /* ---------------- helpers ---------------- */
 
@@ -54,7 +69,6 @@ function json(obj, status = 200) {
 }
 
 async function resolveLink(input) {
-  // Accept: raw ASIN, full amazon URL, or amzn.to short link
   try {
     const looksLikeUrl = /^https?:\/\//i.test(input);
     const u = new URL(looksLikeUrl ? input : `https://www.amazon.co.uk/dp/${input}`);
@@ -63,7 +77,7 @@ async function resolveLink(input) {
       headers: {
         "User-Agent":
           "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36",
-        "Accept-Language": "en-GB,en;q=0.9",
+        "Accept-Language": u.hostname.endsWith(".com") ? "en-US,en;q=0.9" : "en-GB,en;q=0.9",
         Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
       }
     });
@@ -99,6 +113,7 @@ async function fetchHtml(url) {
   });
   const text = await r.text();
   if (!r.ok) {
+    // bubble a short slice for debugging
     throw new Error(`Amazon responded ${r.status}. ${text.slice(0, 200)}`);
   }
   return text;
@@ -115,7 +130,7 @@ function scrapeAmazon(html, url) {
     get(/<meta\s+property=["']og:title["']\s+content=["']([^"']+)["']/i) ||
     get(/<span\s+id=["']productTitle["'][^>]*>\s*([^<]+)\s*<\/span>/i);
 
-  // Description (fallback to feature bullets stripped of tags)
+  // Description (fallback to feature bullets)
   let desc =
     get(/<meta\s+name=["']description["']\s+content=["']([^"']+)["']/i) || "";
   if (!desc) {
@@ -125,7 +140,7 @@ function scrapeAmazon(html, url) {
     }
   }
 
-  // Images: og:image / json blobs / dynamic image attribute
+  // Images — og:image / JSON blobs / dynamic image attribute
   let mainImg =
     get(/<meta\s+property=["']og:image["']\s+content=["']([^"']+)["']/i) ||
     get(/"large"\s*:\s*"((?:https:)?\/\/[^"]+)"/i) ||
@@ -133,8 +148,7 @@ function scrapeAmazon(html, url) {
     "";
 
   if (!mainImg) {
-    // data-a-dynamic-image="{"https://...jpg":[500,500], ...}"
-    const dyn = get(/data-a-dynamic-image="({[^"]+})"/i);
+    const dyn = get(/data-a-dynamic-image="({[^"]+})"/i); // {"https://...jpg":[500,500],...}
     if (dyn) {
       try {
         const obj = JSON.parse(dyn.replace(/&quot;/g, '"'));
