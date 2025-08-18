@@ -176,36 +176,61 @@
         const fd = new FormData(form);
         const data = Object.fromEntries(fd.entries());
 
-        // booleans / coercions
-        data.approved = !!fd.get('approved');
+<script>
+  (function () {
+    const form = document.getElementById('productForm');
+    const preview = document.getElementById('preview');
 
-        try {
-          const res = await fetch('/api/admin/product-upsert', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(data)
-          });
-          const out = await res.json();
-          if (!res.ok) {
-            console.error(out);
-            return alert((out && out.error) ? '❌ ' + out.error : '❌ Insert failed');
-          }
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
 
-          const row = out.product || data;
-          preview.style.display = 'block';
-          preview.innerHTML = `
-            <h3>✅ Product Preview</h3>
-            <p><strong>${row.my_title || ''}</strong></p>
-            ${row.image_main ? `<img src="${row.image_main}" alt="Preview" style="max-width:100%;border-radius:8px" />` : ''}
-            <p>${row.my_description_short || ''}</p>
-            <p><small>product_num: <code>${row.product_num || ''}</code></small></p>
-          `;
-          form.reset();
-          alert('✅ Saved!');
-        } catch (err) {
-          console.error(err);
-          alert('❌ Failed to add product.');
+      // Build payload
+      const fd = new FormData(form);
+      const data = Object.fromEntries(fd.entries());
+
+      // ✨ Use exactly what the user typed for the affiliate link
+      data.affiliate_link = (document.getElementById('affiliate_link').value || '').trim();
+
+      // booleans / coercions
+      data.approved = !!fd.get('approved');
+      if (data.commission_l !== '' && data.commission_l != null) {
+        const n = Number(data.commission_l);
+        data.commission_l = Number.isFinite(n) ? n : null;
+      } else {
+        data.commission_l = null;
+      }
+
+      try {
+        const res = await fetch('/api/admin/product-upsert', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data)
+        });
+        const out = await res.json();
+        if (!res.ok) {
+          console.error(out);
+          return alert((out && out.error) ? '❌ ' + out.error : '❌ Insert failed');
         }
+
+        const row = out.product || data;
+        preview.style.display = 'block';
+        preview.innerHTML = `
+          <h3>✅ Product Preview</h3>
+          <p><strong>${row.my_title || ''}</strong></p>
+          ${row.image_main ? `<img src="${row.image_main}" alt="Preview" style="max-width:100%;border-radius:8px" />` : ''}
+          <p>${row.my_description_short || ''}</p>
+          <p><small>product_num: <code>${row.product_num || ''}</code></small></p>
+        `;
+        form.reset();
+        alert('✅ Saved!');
+      } catch (err) {
+        console.error(err);
+        alert('❌ Failed to add product.');
+      }
+    });
+  })();
+</script>
+
       });
     })();
   </script>
