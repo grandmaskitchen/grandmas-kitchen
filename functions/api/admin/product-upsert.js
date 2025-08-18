@@ -21,7 +21,7 @@ export const onRequestPost = async ({ request, env }) => {
       commission_percentage: "commission_l",
     };
 
-    // Allowed columns
+    // Only allow these columns to pass through
     const allowed = new Set([
       "manufacturer",
       "product_num",
@@ -43,6 +43,7 @@ export const onRequestPost = async ({ request, env }) => {
       "commission_l",     // numeric
       "approved",         // boolean
       "added_by",
+      // FAB
       "features",
       "advantages",
       "benefits",
@@ -56,20 +57,13 @@ export const onRequestPost = async ({ request, env }) => {
       row[dest] = v === "" ? null : v;
     }
 
-    // --- Normalize affiliate link to keep DB clean ---
-    if (row.affiliate_link) {
-      row.affiliate_link = normalizeAffiliate(row.affiliate_link, env);
-    }
-
     // Derive product_num from ASIN if not provided
     if (!row.product_num) {
-      const asin =
-        extractASIN(row.affiliate_link) ||
-        extractASIN(row.amazon_title) ||
-        extractASIN(row.my_title);
-      if (asin) row.product_num = asin.toLowerCase();
+      const asin = extractASIN(row.affiliate_link) || extractASIN(row.amazon_title) || extractASIN(row.my_title);
+      if (asin) row.product_num = asin.toLowerCase(); // use ASIN as your product_num
     }
     if (!row.product_num) {
+      // Last fallback: short slug from title + timestamp tail
       row.product_num = slugify(row.my_title || row.amazon_title || "sku") + "-" + (Date.now() % 100000);
     }
 
@@ -86,7 +80,7 @@ export const onRequestPost = async ({ request, env }) => {
       row.approved === "on" ||
       row.approved === 1;
 
-    // Prefer Cloudflare Access email
+    // Prefer Cloudflare Access email as added_by
     const accessEmail =
       request.headers.get("Cf-Access-Authenticated-User-Email") ||
       request.headers.get("cf-access-authenticated-user-email");
@@ -109,7 +103,8 @@ export const onRequestPost = async ({ request, env }) => {
       return json({ error: "affiliate_link must be an Amazon URL" }, 400);
     }
 
-    // Insert
+    // Insert (not upsert) — simpler and works even if product_num is not unique yet.
+    // If later you add a UNIQUE constraint on product_num, we can switch to upsert.
     const resp = await fetch(`${env.SUPABASE_URL}/rest/v1/products`, {
       method: "POST",
       headers: {
@@ -123,9 +118,11 @@ export const onRequestPost = async ({ request, env }) => {
 
     const out = await resp.json();
     if (!resp.ok) {
+      // Make the error loud and readable
       return json({ error: out?.message || "Insert failed", details: out }, 400);
     }
 
+    // out is an array when Prefer:return=representation
     return json({ ok: true, product: out?.[0] ?? null }, 201);
   } catch (err) {
     return json({ error: err?.message || "Server error" }, 500);
@@ -139,52 +136,21 @@ function json(obj, status = 200) {
   });
 }
 
-// ---------- helpers ----------
-
-function normalizeAffiliate(raw, env) {
-  const s = String(raw || "").trim();
-  // Keep short links exactly
-  try {
-    const u = new URL(s);
-    const host = u.host.toLowerCase();
-
-    // If already amzn.to, keep as-is
-    if (/\bamzn\.to$/.test(host)) return s;
-
-    // If amazon.* link, reduce to a clean DP link with a single tag param
-    if (/amazon\./i.test(host)) {
-      const asin =
-        (u.pathname.match(/\/dp\/([A-Z0-9]{10})/i) ||
-          u.pathname.match(/\/gp\/product\/([A-Z0-9]{10})/i) ||
-          u.search.match(/[?&]asin=([A-Z0-9]{10})/i) ||
-          [])[1];
-
-      if (asin) {
-        const out = new URL(`https://${host}/dp/${asin.toUpperCase()}`);
-        const tag =
-          u.searchParams.get("tag") ||
-          (env && env.AMAZON_ASSOCIATE_TAG) ||
-          "";
-        if (tag) out.searchParams.set("tag", tag);
-        return out.toString();
-      }
-    }
-  } catch {
-    // fall through
-  }
-  return s; // if parsing fails, store the original
-}
+// --- helpers ---
 
 function extractASIN(s) {
   if (!s) return null;
   try {
+    // Try URL forms: /dp/B0... or /gp/product/B0...
     const u = new URL(s, "https://x.invalid");
     const m =
       u.pathname.match(/\/dp\/([A-Z0-9]{10})/i) ||
       u.pathname.match(/\/gp\/product\/([A-Z0-9]{10})/i) ||
       u.search.match(/[?&]asin=([A-Z0-9]{10})/i);
     if (m?.[1]) return m[1].toUpperCase();
-  } catch {}
+  } catch {
+    // fall through to plain text
+  }
   const m2 = String(s).toUpperCase().match(/\b([A-Z0-9]{10})\b/);
   return m2 ? m2[1] : null;
 }
