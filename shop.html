@@ -5,6 +5,13 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Grandma’s Pantry • Shop</title>
   <link rel="stylesheet" href="/style.css" />
+  <style>
+    /* Optional: tiny skeleton while loading */
+    .skeleton{background:linear-gradient(90deg,#eee 25%,#f5f5f5 37%,#eee 63%);background-size:400% 100%;animation:shimmer 1.2s infinite}
+    @keyframes shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
+    .skeleton.img{width:200px;height:200px;border-radius:12px;margin:0 auto 10px}
+    .skeleton.text{height:16px;border-radius:8px;margin:6px 0}
+  </style>
 </head>
 <body>
 
@@ -18,20 +25,30 @@
     <a href="/recipes.html">Recipes</a>
     <a href="/shop.html" aria-current="page">Shop</a>
   </nav>
-  <p>Simple food. Lifelong health. Inspired by a 104-year legacy.</p>
+  <p class="lead">Staples we actually use at home—simple, honest ingredients.</p>
 </header>
 
 <main>
   <div class="container container--narrow">
     <h1>🛒 Grandma’s Pantry</h1>
-    <p class="lead">Staples we actually use at home—simple, honest ingredients.</p>
   </div>
 
   <div class="container">
-    <div id="prodGrid" class="grid grid-2">
-      <!-- Filled by JS -->
+    <div id="grid" class="grid grid-2">
+      <!-- Skeleton placeholders shown first -->
+      <article class="card">
+        <div class="skeleton img"></div>
+        <div class="skeleton text" style="width:60%"></div>
+        <div class="skeleton text" style="width:90%"></div>
+        <div class="skeleton text" style="width:40%"></div>
+      </article>
+      <article class="card">
+        <div class="skeleton img"></div>
+        <div class="skeleton text" style="width:70%"></div>
+        <div class="skeleton text" style="width:85%"></div>
+        <div class="skeleton text" style="width:45%"></div>
+      </article>
     </div>
-    <noscript><p>Please enable JavaScript to see products.</p></noscript>
   </div>
 </main>
 
@@ -42,40 +59,40 @@
 
 <script>
 (async function () {
-  const grid = document.getElementById('prodGrid');
-
-  function cardHTML(p) {
-    const href = `/products/${encodeURIComponent(p.product_num || '')}`;
-    const title = p.my_title || 'Product';
-    const img = p.image_main || '';
-    const blurb = p.my_description_short || '';
-
-    return `
-<article class="card" aria-labelledby="t-${p.product_num}">
-  <a class="product-image" href="${href}">
-    ${img ? `<img loading="lazy" decoding="async" src="${img}" alt="${title}">` : ''}
-  </a>
-  <h3 id="t-${p.product_num}" class="product-title">
-    <a href="${href}">${title}</a>
-  </h3>
-  ${blurb ? `<p>${blurb}</p>` : ``}
-  <p><a class="btn" href="${href}">View product</a></p>
-</article>`;
-  }
+  const grid = document.getElementById('grid');
+  const esc = s => (s||'').replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m]));
 
   try {
-    const r = await fetch('/api/products-list');
-    const { products, error } = await r.json();
-    if (!r.ok) throw new Error(error || 'Fetch failed');
+    const r = await fetch('/api/shop-list?limit=100');
+    const { items, error } = await r.json();
+    if (!r.ok || !Array.isArray(items)) throw new Error(error || 'Failed to load');
 
-    if (!products || !products.length) {
-      grid.innerHTML = `<p>No products yet — check back soon.</p>`;
+    if (!items.length) {
+      grid.innerHTML = `<p class="muted">No products yet.</p>`;
       return;
     }
-    grid.innerHTML = products.map(cardHTML).join('');
-  } catch (e) {
-    console.error(e);
-    grid.innerHTML = `<p>Sorry, we couldn’t load the pantry right now.</p>`;
+
+    grid.innerHTML = items.map(p => {
+      const title = p.my_title || p.amazon_title || 'Product';
+      const img = p.image_main || '';
+      const slug = p.product_num || '';
+      const cat = p.amazon_category || '';
+      return `
+        <article class="card" aria-labelledby="prod-${esc(slug)}-title">
+          <a class="product-image" href="/products/${encodeURIComponent(slug)}">
+            ${img ? `<img loading="lazy" decoding="async" src="${esc(img)}" alt="${esc(title)}">` : ''}
+          </a>
+          <h3 id="prod-${esc(slug)}-title" class="product-title">
+            <a href="/products/${encodeURIComponent(slug)}">${esc(title)}</a>
+          </h3>
+          ${cat ? `<p class="muted" style="margin:.25rem 0 .5rem">${esc(cat)}</p>` : ''}
+          <p><a class="btn" href="/products/${encodeURIComponent(slug)}">View product</a></p>
+        </article>
+      `;
+    }).join('');
+  } catch (err) {
+    console.error(err);
+    grid.innerHTML = `<p class="muted">Sorry, the shop is unavailable right now.</p>`;
   }
 })();
 </script>
