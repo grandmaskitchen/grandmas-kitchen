@@ -155,7 +155,7 @@
     (function () {
       const btn = document.getElementById('fetchAmazon');
       const statusEl = document.getElementById('fetchStatus');
-      const byName = (n) => document.querySelector(\`[name="\${n}"]\`);
+      const byName = (n) => document.querySelector(`[name="${n}"]`);
 
       async function doFetch() {
         const inputEl = document.getElementById('affiliate_link');
@@ -170,13 +170,27 @@
         statusEl.textContent = 'Fetching product details…';
         btn.disabled = true;
         try {
-          const r = await fetch('/api/amazon-fetch', {
-            method:'POST',
-            headers:{ 'Content-Type':'application/json' },
-            body: JSON.stringify({ input })
-          });
+          // ---- Fallback: try both endpoints ----
+          const endpoints = ['/api/amazon-fetch', '/api/admin/amazon-fetch'];
+          let r, lastErr;
+
+          for (const ep of endpoints) {
+            try {
+              r = await fetch(ep, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ input })
+              });
+              if (r.ok) break;                // success on this endpoint
+              lastErr = new Error(`${ep} → HTTP ${r.status}`);
+            } catch (e) {
+              lastErr = e;
+            }
+          }
+          if (!r || !r.ok) throw lastErr || new Error('Fetch failed');
+
           const json = await r.json();
-          if (!r.ok) throw new Error(json?.error?.message || json?.message || 'Fetch failed');
+          // --------------------------------------
 
           const s = json.scraped || {};
           const setIfEmpty = (name, val) => {
@@ -242,12 +256,12 @@
 
           const row = out.product || data;
           preview.style.display = 'block';
-          preview.innerHTML = \`
+          preview.innerHTML = `
             <h3>✅ Product Preview</h3>
-            <p><strong>\${row.my_title || ''}</strong><br><em>\${row.my_subtitle || ''}</em></p>
-            \${row.image_main ? \`<img src="\${row.image_main}" alt="Preview" style="max-width:100%;border-radius:8px" />\` : ''}
-            <p>\${row.my_description_short || ''}</p>
-          \`;
+            <p><strong>${row.my_title || ''}</strong><br><em>${row.my_subtitle || ''}</em></p>
+            ${row.image_main ? `<img src="${row.image_main}" alt="Preview" style="max-width:100%;border-radius:8px" />` : ''}
+            <p>${row.my_description_short || ''}</p>
+          `;
           form.reset();
           alert('✅ Saved!');
         } catch (err) {
