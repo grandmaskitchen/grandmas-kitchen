@@ -16,9 +16,6 @@ export const onRequestPost = async ({ request, env }) => {
   try {
     const incoming = await request.json();
 
-    // Preserve EXACT value typed for affiliate_link before we touch anything else
-    const rawAffiliate = (incoming?.affiliate_link || "").trim();
-
     // Map any legacy keys -> current DB names
     const synonyms = {
       amazon_descr: "amazon_desc",
@@ -47,7 +44,6 @@ export const onRequestPost = async ({ request, env }) => {
       "commission_l",
       "approved",
       "added_by",
-      // (ok if unused; harmless to leave)
       "features",
       "advantages",
       "benefits"
@@ -60,9 +56,6 @@ export const onRequestPost = async ({ request, env }) => {
       if (!allowed.has(dest)) continue;
       row[dest] = v === "" ? null : v;
     }
-
-    // Force affiliate_link to EXACT user input
-    row.affiliate_link = rawAffiliate || null;
 
     // Coerce types
     if (row.commission_l != null && row.commission_l !== "") {
@@ -92,26 +85,13 @@ export const onRequestPost = async ({ request, env }) => {
     } catch {
       return json({ error: "image_main must be a valid URL" }, 400);
     }
-    // Accept amzn.to or amazon.* with/without "www."
-    if (
-      row.affiliate_link &&
-      !/^(https?:\/\/)(amzn\.to|(?:www\.)?amazon\.)/i.test(row.affiliate_link)
-    ) {
+    if (row.affiliate_link && !/^(https?:\/\/)(amzn\.to|www\.amazon\.)/i.test(row.affiliate_link)) {
       return json({ error: "affiliate_link must be an Amazon URL" }, 400);
     }
 
-    // Ensure a product_num (prefer ASIN if present)
+    // Ensure a product_num for upsert key if user didn’t provide one
     if (!row.product_num) {
-      const asin =
-        extractASIN(row.affiliate_link) ||
-        extractASIN(row.amazon_title) ||
-        extractASIN(row.my_title);
-      if (asin) {
-        row.product_num = asin.toLowerCase();
-      } else {
-        row.product_num =
-          slugify(row.my_title) + "-" + Date.now().toString(36).slice(-4);
-      }
+      row.product_num = slugify(row.my_title) + "-" + Date.now().toString(36).slice(-4);
     }
 
     // ---- Supabase REST upsert ----
@@ -151,28 +131,9 @@ function json(obj, status = 200) {
   });
 }
 
-// ---- helpers ----
-
-function extractASIN(s) {
-  if (!s) return null;
-  try {
-    const u = new URL(s, "https://x.invalid");
-    const m =
-      u.pathname.match(/\/dp\/([A-Z0-9]{10})/i) ||
-      u.pathname.match(/\/gp\/product\/([A-Z0-9]{10})/i) ||
-      u.search.match(/[?&]asin=([A-Z0-9]{10})/i);
-    if (m?.[1]) return m[1].toUpperCase();
-  } catch {
-    /* fall through */
-  }
-  const m2 = String(s).toUpperCase().match(/\b([A-Z0-9]{10})\b/);
-  return m2 ? m2[1] : null;
-}
-
 function slugify(s = "") {
   return s
     .toLowerCase()
-    .normalize("NFKD").replace(/[\u0300-\u036f]/g, "")
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/(^-|-$)/g, "")
     .slice(0, 40);
