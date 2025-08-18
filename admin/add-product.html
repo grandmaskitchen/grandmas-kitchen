@@ -13,10 +13,12 @@
     label{font-weight:600}
     input,select,textarea{width:100%;box-sizing:border-box;padding:.6rem;border:1px solid #cfcfcf;border-radius:8px;font-size:1rem}
     .row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
-    .actions{display:flex;gap:12px;align-items:center;margin-top:.5rem}
+    .actions{display:flex;gap:12px;align-items:center;margin-top:.5rem;flex-wrap:wrap}
     .hint{font-size:.85rem;color:#666}
     button{background:#44633F;color:#fff;border:0;border-radius:8px;padding:.7rem 1rem;cursor:pointer}
     button.secondary{background:#ddd;color:#222}
+    a.secondary{display:inline-block;background:#ddd;color:#222;text-decoration:none;border-radius:8px;padding:.7rem 1rem}
+    a.secondary:hover{background:#cfcfcf}
     #fetchStatus{font-size:.9rem;color:#666}
     #preview{display:none;background:#fff7ea;border:1px solid #eee;border-radius:10px;padding:12px}
   </style>
@@ -39,7 +41,7 @@
         <input id="affiliate_link" name="affiliate_link" type="url" placeholder="https://amzn.to/... or https://www.amazon.co.uk/..." />
         <button id="fetchAmazon" type="button" title="Fetch details from Amazon">Fetch</button>
       </div>
-      <span id="fetchStatus" class="hint"></span>
+      <span id="fetchStatus" class="hint" aria-live="polite"></span>
 
       <!-- Optional Amazon-origin fields -->
       <label for="amazon_title">Amazon Title</label>
@@ -131,8 +133,8 @@
       <label for="manufacturer">Manufacturer</label>
       <input id="manufacturer" name="manufacturer" />
 
-      <label for="product_num">My Product #</label>
-      <input id="product_num" name="product_num" />
+      <label for="product_num">My Product # (slug, e.g. acv001) *</label>
+      <input id="product_num" name="product_num" required />
 
       <div class="actions">
         <label style="display:flex;gap:.5rem;align-items:center;">
@@ -143,19 +145,19 @@
 
       <div class="actions">
         <button type="submit">Submit</button>
-        <a class="secondary" href="/shop.html"><button type="button" class="secondary">Back to Pantry</button></a>
+        <a class="secondary" href="/shop.html" role="button">Back to Pantry</a>
       </div>
     </form>
 
     <div id="preview" class="wrap"></div>
   </div>
 
-  <!-- Amazon fetch wiring (unchanged) -->
+  <!-- Amazon fetch wiring -->
   <script>
     (function () {
       const btn = document.getElementById('fetchAmazon');
       const statusEl = document.getElementById('fetchStatus');
-      const byName = (n) => document.querySelector(`[name="${n}"]`);
+      const byName = (n) => document.querySelector(\`[name="\${n}"]\`);
 
       async function doFetch() {
         const inputEl = document.getElementById('affiliate_link');
@@ -173,7 +175,7 @@
           const r = await fetch('/api/amazon-fetch', {
             method:'POST',
             headers:{ 'Content-Type':'application/json' },
-            body: JSON.stringify({ input })
+            body: JSON.stringify({ input })   // raw URL, amzn.to, or ASIN
           });
           const json = await r.json();
           if (!r.ok) throw new Error(json?.error?.message || json?.message || 'Fetch failed');
@@ -210,17 +212,40 @@
     })();
   </script>
 
-  <!-- Submit to /api/products (unchanged) -->
+  <!-- Submit to /api/products -->
   <script>
     (function () {
       const form = document.getElementById('productForm');
       const preview = document.getElementById('preview');
+
+      // Helper: if product_num blank at submit, suggest one from my_title
+      function suggestSlugFromTitle(title){
+        return (title || '')
+          .toLowerCase()
+          .replace(/&/g,' and ')
+          .replace(/[^a-z0-9]+/g,'-')
+          .replace(/(^-|-$)/g,'')
+          .slice(0,32) || 'item-' + Math.random().toString(36).slice(2,7);
+      }
 
       form.addEventListener('submit', async (e) => {
         e.preventDefault();
         const fd = new FormData(form);
         const data = Object.fromEntries(fd.entries());
 
+        // ensure product_num present
+        if (!data.product_num) {
+          const guess = suggestSlugFromTitle(data.my_title);
+          if (confirm(\`No product code entered. Use “\${guess}”?\`)) {
+            data.product_num = guess;
+            document.getElementById('product_num').value = guess;
+          } else {
+            alert('Please enter a product code (e.g., acv001).');
+            return;
+          }
+        }
+
+        // coerce types expected by backend
         data.approved = !!fd.get('approved');
         if (data.commission_l !== '' && data.commission_l != null) {
           const n = Number(data.commission_l);
@@ -242,12 +267,14 @@
           }
 
           const row = out.product || data;
+          // Tiny preview
           preview.style.display = 'block';
           preview.innerHTML = `
             <h3>✅ Product Preview</h3>
             <p><strong>${row.my_title || ''}</strong><br><em>${row.my_subtitle || ''}</em></p>
             ${row.image_main ? `<img src="${row.image_main}" alt="Preview" style="max-width:100%;border-radius:8px" />` : ''}
             <p>${row.my_description_short || ''}</p>
+            <p class="hint">View page: /products/${row.product_num || ''}</p>
           `;
           form.reset();
           alert('✅ Saved!');
