@@ -1,5 +1,5 @@
 // /functions/api/admin/product-upsert.js
-// POST /api/admin/product-upsert  ->  { ok:true, product:{...} } on success
+// POST /api/admin/product-upsert  ->  { ok:true, product:{...} }
 
 export const onRequestOptions = ({ request }) =>
   new Response(null, {
@@ -7,7 +7,8 @@ export const onRequestOptions = ({ request }) =>
     headers: {
       "Access-Control-Allow-Origin": request.headers.get("Origin") || "*",
       "Access-Control-Allow-Methods": "POST, OPTIONS",
-      "Access-Control-Allow-Headers": "Content-Type, Cf-Access-Authenticated-User-Email"
+      "Access-Control-Allow-Headers":
+        "Content-Type, Cf-Access-Authenticated-User-Email"
     }
   });
 
@@ -15,13 +16,13 @@ export const onRequestPost = async ({ request, env }) => {
   try {
     const incoming = await request.json();
 
-    // Map legacy keys if any
+    // Synonyms (legacy)
     const synonyms = {
       amazon_descr: "amazon_desc",
-      commission_percentage: "commission_l",
+      commission_percentage: "commission_l"
     };
 
-    // Only allow these columns to pass through
+    // Whitelist
     const allowed = new Set([
       "manufacturer",
       "product_num",
@@ -40,13 +41,13 @@ export const onRequestPost = async ({ request, env }) => {
       "ad_type",
       "amazon_category",
       "product_type",
-      "commission_l",     // numeric
-      "approved",         // boolean
+      "commission_l",
+      "approved",
       "added_by",
-      // FAB
+      // (even if not used on this form yet)
       "features",
       "advantages",
-      "benefits",
+      "benefits"
     ]);
 
     // Normalize keys and drop unknowns
@@ -57,14 +58,22 @@ export const onRequestPost = async ({ request, env }) => {
       row[dest] = v === "" ? null : v;
     }
 
+    // ⛳️ Canonicalize affiliate link *without* changing short amzn.to links
+    if (row.affiliate_link) {
+      row.affiliate_link = normalizeAffiliateLink(row.affiliate_link);
+    }
+
     // Derive product_num from ASIN if not provided
     if (!row.product_num) {
-      const asin = extractASIN(row.affiliate_link) || extractASIN(row.amazon_title) || extractASIN(row.my_title);
-      if (asin) row.product_num = asin.toLowerCase(); // use ASIN as your product_num
+      const asin =
+        extractASIN(row.affiliate_link) ||
+        extractASIN(row.amazon_title) ||
+        extractASIN(row.my_title);
+      if (asin) row.product_num = asin.toLowerCase();
     }
     if (!row.product_num) {
-      // Last fallback: short slug from title + timestamp tail
-      row.product_num = slugify(row.my_title || row.amazon_title || "sku") + "-" + (Date.now() % 100000);
+      row.product_num = slugify(row.my_title || row.amazon_title || "sku") +
+        "-" + (Date.now() % 100000);
     }
 
     // Coerce types
@@ -80,7 +89,7 @@ export const onRequestPost = async ({ request, env }) => {
       row.approved === "on" ||
       row.approved === 1;
 
-    // Prefer Cloudflare Access email as added_by
+    // Prefer Cloudflare Access email
     const accessEmail =
       request.headers.get("Cf-Access-Authenticated-User-Email") ||
       request.headers.get("cf-access-authenticated-user-email");
@@ -103,8 +112,7 @@ export const onRequestPost = async ({ request, env }) => {
       return json({ error: "affiliate_link must be an Amazon URL" }, 400);
     }
 
-    // Insert (not upsert) — simpler and works even if product_num is not unique yet.
-    // If later you add a UNIQUE constraint on product_num, we can switch to upsert.
+    // Insert (simple). If you add UNIQUE(product_num) later, you can switch to upsert.
     const resp = await fetch(`${env.SUPABASE_URL}/rest/v1/products`, {
       method: "POST",
       headers: {
@@ -118,11 +126,9 @@ export const onRequestPost = async ({ request, env }) => {
 
     const out = await resp.json();
     if (!resp.ok) {
-      // Make the error loud and readable
       return json({ error: out?.message || "Insert failed", details: out }, 400);
     }
 
-    // out is an array when Prefer:return=representation
     return json({ ok: true, product: out?.[0] ?? null }, 201);
   } catch (err) {
     return json({ error: err?.message || "Server error" }, 500);
@@ -136,22 +142,40 @@ function json(obj, status = 200) {
   });
 }
 
-// --- helpers ---
+/* ---------- helpers ---------- */
 
-function extractASIN(s) {
-  if (!s) return null;
+function normalizeAffiliateLink(raw) {
+  const s = String(raw).trim();
+  // Keep amzn.to short links EXACTLY as pasted.
+  if (/^https?:\/\/(www\.)?amzn\.to\//i.test(s)) return s;
+
+  // Canonicalize long Amazon links to: https://www.amazon.xx/dp/ASIN?tag=YOURTAG
   try {
-    // Try URL forms: /dp/B0... or /gp/product/B0...
-    const u = new URL(s, "https://x.invalid");
+    const u = new URL(s);
+    if (!/amazon\./i.test(u.host)) return s;
+
+    const asin = extractASIN(s);
+    if (!asin) return s;
+
+    const tag = u.searchParams.get("tag");
+    const base = `${u.protocol}//${u.host}/dp/${asin}`;
+    return tag ? `${base}?tag=${encodeURIComponent(tag)}` : base;
+  } catch {
+    return s;
+  }
+}
+
+function extractASIN(input) {
+  if (!input) return null;
+  try {
+    const u = new URL(input, "https://x.invalid");
     const m =
       u.pathname.match(/\/dp\/([A-Z0-9]{10})/i) ||
       u.pathname.match(/\/gp\/product\/([A-Z0-9]{10})/i) ||
       u.search.match(/[?&]asin=([A-Z0-9]{10})/i);
     if (m?.[1]) return m[1].toUpperCase();
-  } catch {
-    // fall through to plain text
-  }
-  const m2 = String(s).toUpperCase().match(/\b([A-Z0-9]{10})\b/);
+  } catch { /* fall through */ }
+  const m2 = String(input).toUpperCase().match(/\b([A-Z0-9]{10})\b/);
   return m2 ? m2[1] : null;
 }
 
