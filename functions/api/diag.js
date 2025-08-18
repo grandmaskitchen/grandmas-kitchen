@@ -1,5 +1,7 @@
 // functions/api/diag.js
 
+https://grandmaskitchen.org/api/diag?ts=<any number>
+
 export async function onRequestGet({ env }) {
   const out = {
     urlOk: Boolean(env.SUPABASE_URL),
