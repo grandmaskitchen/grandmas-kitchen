@@ -242,12 +242,12 @@
           data.commission_l = null;
         }
 
-        try {
-          const res = await fetch('/api/products', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(data)
-          });
+        const res = await fetch('/api/admin/product-upsert', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify(data)
+});
+
           const out = await res.json();
           if (!res.ok) {
             console.error(out);
