@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Admin • Grandma’s Kitchen</title>
+  <meta name="robots" content="noindex,nofollow" />
+  <style>
+    :root{--ink:#222;--muted:#666;--bg:#fffdf8;--card:#fff;--olive:#44633F;--accent:#e77a57}
+    body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;background:var(--bg);color:var(--ink);margin:0;padding:24px}
+    .wrap{max-width:1100px;margin:0 auto}
+    h1{margin:0 0 1rem}
+    .bar{display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin:.5rem 0 1rem}
+    input,select,button{font:inherit}
+    input[type="search"],select{padding:.5rem .6rem;border:1px solid #ccc;border-radius:8px}
+    button{background:var(--olive);color:#fff;border:0;border-radius:8px;padding:.55rem .9rem;cursor:pointer}
+    button.secondary{background:#ddd;color:#222}
+    .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;margin:.5rem 0 1rem}
+    .card{background:var(--card);border:1px solid #eee;border-radius:12px;padding:12px}
+    .muted{color:var(--muted)}
+    table{width:100%;border-collapse:collapse;background:var(--card);border:1px solid #eee;border-radius:12px;overflow:hidden}
+    th,td{padding:.6rem .75rem;border-top:1px solid #f0f0f0;vertical-align:top}
+    thead th{background:#fafafa;text-align:left}
+    .row-actions{display:flex;gap:8px;flex-wrap:wrap}
+    .pill{display:inline-block;padding:.15rem .5rem;border-radius:999px;background:#f2f2f2;font-size:.85rem}
+    .right{margin-left:auto}
+    .green{color:#1b7c3a}
+    .red{color:#a62a2a}
+    .img{width:54px;height:54px;border-radius:6px;object-fit:cover;background:#fafafa}
+    .tablewrap{overflow:auto}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Admin • Grandma’s Kitchen</h1>
+
+    <div class="bar">
+      <input id="q" type="search" placeholder="Search title…" />
+      <select id="cat"><option value="">All categories</option></select>
+      <select id="approved">
+        <option value="">All</option>
+        <option value="true">Approved</option>
+        <option value="false">Pending</option>
+      </select>
+      <button id="refresh" class="secondary">Refresh</button>
+      <a href="/admin/add-product.html"><button type="button">➕ Add Product</button></a>
+      <div class="right pill" id="totalBadge">Totals</div>
+    </div>
+
+    <div class="cards" id="metrics">
+      <!-- filled by JS -->
+    </div>
+
+    <div class="tablewrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Img</th>
+            <th>Product</th>
+            <th>Category</th>
+            <th>Approved</th>
+            <th>Slug</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="rows">
+          <tr><td colspan="6" class="muted">Loading…</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+<script>
+(async function () {
+  const $ = sel => document.querySelector(sel);
+  const rowsEl = $('#rows'), catSel = $('#cat'), qEl = $('#q'), apprSel = $('#approved');
+  const metricsEl = $('#metrics'), totalBadge = $('#totalBadge');
+
+  function esc(s){ return (s||'').replace(/[&<>"']/g,m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[m])); }
+
+  async function loadMetrics(){
+    const r = await fetch('/api/admin/metrics');
+    const { totals, byCategory } = await r.json();
+    totalBadge.textContent = `Total: ${totals.total} • Approved: ${totals.approved} • Pending: ${totals.pending}`;
+
+    // fill categories filter (unique list)
+    const cats = [''].concat([...new Set(byCategory.map(x=>x.amazon_category||'Uncategorised'))]);
+    catSel.innerHTML = cats.map(c => `<option value="${esc(c)}">${esc(c||'All categories')}</option>`).join('');
+
+    metricsEl.innerHTML = `
+      <div class="card"><div class="muted">Total</div><div style="font-size:1.6rem">${totals.total}</div></div>
+      <div class="card"><div class="muted">Approved</div><div style="font-size:1.6rem">${totals.approved}</div></div>
+      <div class="card"><div class="muted">Pending</div><div style="font-size:1.6rem">${totals.pending}</div></div>
+      <div class="card"><div class="muted">Categories</div><div style="font-size:1.6rem">${byCategory.length}</div></div>
+    `;
+  }
+
+  async function loadList(){
+    const params = new URLSearchParams();
+    if (qEl.value.trim()) params.set('q', qEl.value.trim());
+    if (catSel.value) params.set('category', catSel.value);
+    if (apprSel.value) params.set('approved', apprSel.value);
+    const r = await fetch('/api/admin/products-list?' + params.toString());
+    const { items } = await r.json();
+
+    if (!items || !items.length) {
+      rowsEl.innerHTML = `<tr><td colspan="6" class="muted">No products found.</td></tr>`;
+      return;
+    }
+
+    rowsEl.innerHTML = items.map(p => `
+      <tr>
+        <td>${p.image_main ? `<img class="img" src="${esc(p.image_main)}" alt="">` : ''}</td>
+        <td>
+          <div contenteditable="true" data-field="my_title" data-slug="${esc(p.product_num||'')}">${esc(p.my_title||'')}</div>
+          ${p.my_subtitle ? `<div class="muted">${esc(p.my_subtitle)}</div>` : ''}
+        </td>
+        <td>${esc(p.amazon_category || '')}</td>
+        <td>
+          <label style="display:flex;gap:.4rem;align-items:center">
+            <input type="checkbox" data-action="toggle" data-slug="${esc(p.product_num||'')}" ${p.approved ? 'checked' : ''} />
+            <span class="${p.approved?'green':'red'}">${p.approved?'Approved':'Pending'}</span>
+          </label>
+        </td>
+        <td><code>${esc(p.product_num||'')}</code></td>
+        <td class="row-actions">
+          <a href="/products/${encodeURIComponent(p.product_num||'')}" target="_blank"><button class="secondary" type="button">View</button></a>
+          <button data-action="save" data-slug="${esc(p.product_num||'')}">Save</button>
+          <button data-action="delete" data-slug="${esc(p.product_num||'')}" class="secondary">Delete</button>
+        </td>
+      </tr>
+    `).join('');
+  }
+
+  // Save title or toggle approved or delete
+  rowsEl.addEventListener('click', async (ev) => {
+    const btn = ev.target.closest('button');
+    const chk = ev.target.closest('input[type="checkbox"][data-action]');
+    if (btn && btn.dataset.action === 'delete') {
+      const slug = btn.dataset.slug;
+      if (!slug) return;
+      if (!confirm('Delete product ' + slug + '?')) return;
+      await fetch('/api/admin/product-delete?product_num=' + encodeURIComponent(slug), { method: 'DELETE' });
+      await loadMetrics(); await loadList(); return;
+    }
+    if (btn && btn.dataset.action === 'save') {
+      const slug = btn.dataset.slug;
+      const cell = rowsEl.querySelector(`[data-field="my_title"][data-slug="${CSS.escape(slug)}"]`);
+      const my_title = (cell?.textContent || '').trim();
+      if (!my_title) return alert('Title cannot be empty');
+      await fetch('/api/admin/product-upsert', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ product_num: slug, my_title })
+      });
+      await loadList(); return;
+    }
+    if (chk && chk.dataset.action === 'toggle') {
+      const slug = chk.dataset.slug;
+      await fetch('/api/admin/product-upsert', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ product_num: slug, approved: chk.checked })
+      });
+      await loadMetrics(); await loadList(); return;
+    }
+  });
+
+  $('#refresh').addEventListener('click', () => { loadMetrics(); loadList(); });
+  qEl.addEventListener('input', () => { clearTimeout(window._t); window._t=setTimeout(loadList, 250); });
+  catSel.addEventListener('change', loadList);
+  apprSel.addEventListener('change', loadList);
+
+  await loadMetrics();
+  await loadList();
+})();
+</script>
+</body>
+</html>
