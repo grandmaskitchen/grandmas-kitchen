@@ -1,0 +1,19 @@
+// GET /api/admin/product-get?product_num=acv001
+
+export const onRequestGet = async ({ request, env }) => {
+  const url = new URL(request.url);
+  const slug = url.searchParams.get('product_num');
+  if (!slug) return json({ error: 'product_num required' }, 400);
+
+  const r = await fetch(`${env.SUPABASE_URL}/rest/v1/products?product_num=eq.${encodeURIComponent(slug)}&select=*&limit=1`, {
+    headers: {
+      apikey: env.SUPABASE_SERVICE_ROLE_KEY,
+      Authorization: `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}`
+    }
+  });
+  const rows = await r.json();
+  if (!r.ok) return json({ error: rows?.message || 'Lookup failed' }, 400);
+  return json({ product: rows?.[0] || null });
+};
+
+function json(obj, status=200){ return new Response(JSON.stringify(obj), {status, headers:{'Content-Type':'application/json'}}); }
