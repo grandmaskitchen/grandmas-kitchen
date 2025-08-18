@@ -1,281 +1,162 @@
-<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Add Product • Grandma’s Kitchen (Admin)</title>
-  <meta name="robots" content="noindex,nofollow" />
-  <style>
-    body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;background:#fffdf8;color:#222;margin:0;padding:24px}
-    .wrap{max-width:760px;margin:0 auto}
-    h1{font-size:1.6rem;margin:0 0 1rem}
-    form{display:grid;gap:12px;background:#fff;padding:16px;border-radius:10px;box-shadow:0 2px 8px rgba(0,0,0,.06)}
-    label{font-weight:600}
-    input,select,textarea{width:100%;box-sizing:border-box;padding:.6rem;border:1px solid #cfcfcf;border-radius:8px;font-size:1rem}
-    .row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
-    .actions{display:flex;gap:12px;align-items:center;margin-top:.5rem}
-    .hint{font-size:.85rem;color:#666}
-    button{background:#44633F;color:#fff;border:0;border-radius:8px;padding:.7rem 1rem;cursor:pointer}
-    button.secondary{background:#ddd;color:#222}
-    #fetchStatus{font-size:.9rem;color:#666}
-    #preview{display:none;background:#fff7ea;border:1px solid #eee;border-radius:10px;padding:12px}
-  </style>
-</head>
-<body>
-  <div class="wrap">
-    <h1>📦 Add a New Product</h1>
+// /functions/api/admin/product-upsert.js
+// POST /api/admin/product-upsert  ->  { ok:true, product:{...} } on success
 
-    <form id="productForm" autocomplete="off">
-      <!-- Required -->
-      <label for="my_title">My Title *</label>
-      <input id="my_title" name="my_title" required />
+export const onRequestOptions = ({ request }) =>
+  new Response(null, {
+    status: 204,
+    headers: {
+      "Access-Control-Allow-Origin": request.headers.get("Origin") || "*",
+      "Access-Control-Allow-Methods": "POST, OPTIONS",
+      "Access-Control-Allow-Headers": "Content-Type, Cf-Access-Authenticated-User-Email"
+    }
+  });
 
-      <label for="image_main">Main Image URL *</label>
-      <input id="image_main" name="image_main" type="url" required placeholder="https://..." />
+export const onRequestPost = async ({ request, env }) => {
+  try {
+    const incoming = await request.json();
 
-      <!-- Amazon / Affiliate -->
-      <label for="affiliate_link">Affiliate Link (Amazon)</label>
-      <div class="row" style="grid-template-columns:1fr auto">
-        <input id="affiliate_link" name="affiliate_link" type="url" placeholder="https://amzn.to/... or https://www.amazon.co.uk/..." />
-        <button id="fetchAmazon" type="button" title="Fetch details from Amazon">Fetch</button>
-      </div>
-      <span id="fetchStatus" class="hint"></span>
+    // Map legacy keys if any
+    const synonyms = {
+      amazon_descr: "amazon_desc",
+      commission_percentage: "commission_l",
+    };
 
-      <!-- Optional Amazon-origin fields -->
-      <label for="amazon_title">Amazon Title</label>
-      <input id="amazon_title" name="amazon_title" />
+    // Only allow these columns to pass through
+    const allowed = new Set([
+      "manufacturer",
+      "product_num",
+      "affiliate_link",
+      "amazon_title",
+      "amazon_desc",
+      "my_title",
+      "my_subtitle",
+      "my_description_short",
+      "my_description_long",
+      "image_main",
+      "image_small",
+      "image_extra_1",
+      "image_extra_2",
+      "where_advertised",
+      "ad_type",
+      "amazon_category",
+      "product_type",
+      "commission_l",     // numeric
+      "approved",         // boolean
+      "added_by",
+      // (FAB fields are NOT used in Source Admin, but keeping for compatibility)
+      "features",
+      "advantages",
+      "benefits",
+    ]);
 
-      <label for="amazon_desc">Amazon Description</label>
-      <textarea id="amazon_desc" name="amazon_desc" rows="3"></textarea>
+    // Normalize keys and drop unknowns
+    const row = {};
+    for (const [k, v] of Object.entries(incoming || {})) {
+      const dest = synonyms[k] || k;
+      if (!allowed.has(dest)) continue;
+      row[dest] = v === "" ? null : v;
+    }
 
-      <!-- Your content -->
-      <label for="my_subtitle">My Subtitle</label>
-      <input id="my_subtitle" name="my_subtitle" />
+    // Derive product_num from ASIN if not provided
+    if (!row.product_num) {
+      const asin = extractASIN(row.affiliate_link) || extractASIN(row.amazon_title) || extractASIN(row.my_title);
+      if (asin) row.product_num = asin.toLowerCase(); // use ASIN as your product_num
+    }
+    if (!row.product_num) {
+      // Last fallback: short slug from title + timestamp tail
+      row.product_num = slugify(row.my_title || row.amazon_title || "sku") + "-" + (Date.now() % 100000);
+    }
 
-      <label for="my_description_short">Short Description</label>
-      <textarea id="my_description_short" name="my_description_short" rows="2"></textarea>
+    // Coerce types
+    if (row.commission_l != null && row.commission_l !== "") {
+      const n = Number(row.commission_l);
+      row.commission_l = Number.isFinite(n) ? n : null;
+    } else {
+      row.commission_l = null;
+    }
+    row.approved =
+      row.approved === true ||
+      row.approved === "true" ||
+      row.approved === "on" ||
+      row.approved === 1;
 
-      <label for="my_description_long">Long Description</label>
-      <textarea id="my_description_long" name="my_description_long" rows="5"></textarea>
+    // Prefer Cloudflare Access email as added_by
+    const accessEmail =
+      request.headers.get("Cf-Access-Authenticated-User-Email") ||
+      request.headers.get("cf-access-authenticated-user-email");
+    if (accessEmail) row.added_by = accessEmail;
 
-      <!-- Images -->
-      <div class="row">
-        <div>
-          <label for="image_small">Small Image URL</label>
-          <input id="image_small" name="image_small" type="url" />
-        </div>
-        <div>
-          <label for="image_extra_1">Extra Image 1 URL</label>
-          <input id="image_extra_1" name="image_extra_1" type="url" />
-        </div>
-      </div>
-      <div class="row">
-        <div>
-          <label for="image_extra_2">Extra Image 2 URL</label>
-          <input id="image_extra_2" name="image_extra_2" type="url" />
-        </div>
-        <div>
-          <label for="amazon_category">Amazon Category</label>
-          <input id="amazon_category" name="amazon_category" />
-        </div>
-      </div>
+    // Basic validation
+    if (!row.my_title || !String(row.my_title).trim()) {
+      return json({ error: "my_title is required" }, 400);
+    }
+    try {
+      if (row.image_main) new URL(row.image_main);
+      else return json({ error: "image_main must be a valid URL" }, 400);
+    } catch {
+      return json({ error: "image_main must be a valid URL" }, 400);
+    }
+    if (
+      row.affiliate_link &&
+      !/^(https?:\/\/)(amzn\.to|www\.amazon\.)/i.test(row.affiliate_link)
+    ) {
+      return json({ error: "affiliate_link must be an Amazon URL" }, 400);
+    }
 
-      <!-- Meta -->
-      <div class="row">
-        <div>
-          <label for="where_advertised">Where Advertised</label>
-          <input id="where_advertised" name="where_advertised" placeholder="Instagram, Facebook" />
-        </div>
-        <div>
-          <label for="ad_type">Ad Type</label>
-          <select id="ad_type" name="ad_type">
-            <option value="">—</option>
-            <option value="organic">Organic</option>
-            <option value="paid">Paid</option>
-            <option value="unpaid">Unpaid</option>
-          </select>
-        </div>
-      </div>
+    // Insert via Supabase REST
+    const resp = await fetch(`${env.SUPABASE_URL}/rest/v1/products`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        apikey: env.SUPABASE_SERVICE_ROLE_KEY,
+        Authorization: `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}`,
+        Prefer: "return=representation"
+      },
+      body: JSON.stringify(row)
+    });
 
-      <div class="row">
-        <div>
-          <label for="product_type">Product Type</label>
-          <select id="product_type" name="product_type">
-            <option value="">—</option>
-            <option value="powder">Powder</option>
-            <option value="tablet">Tablet</option>
-            <option value="pill">Pill</option>
-            <option value="liquid">Liquid</option>
-          </select>
-        </div>
-        <div>
-          <label for="commission_l">Commission %</label>
-          <input id="commission_l" name="commission_l" type="number" step="0.01" placeholder="e.g. 2" />
-        </div>
-      </div>
+    const out = await resp.json();
+    if (!resp.ok) {
+      return json({ error: out?.message || "Insert failed", details: out }, 400);
+    }
 
-      <!-- Optional -->
-      <label for="added_by">Added By</label>
-      <input id="added_by" name="added_by" />
+    // out is an array when Prefer:return=representation
+    return json({ ok: true, product: out?.[0] ?? null }, 201);
+  } catch (err) {
+    return json({ error: err?.message || "Server error" }, 500);
+  }
+};
 
-      <label for="manufacturer">Manufacturer</label>
-      <input id="manufacturer" name="manufacturer" />
+function json(obj, status = 200) {
+  return new Response(JSON.stringify(obj), {
+    status,
+    headers: { "Content-Type": "application/json" }
+  });
+}
 
-      <label for="product_num">My Product #</label>
-      <input id="product_num" name="product_num" />
+// --- helpers ---
 
-      <div class="actions">
-        <label style="display:flex;gap:.5rem;align-items:center;">
-          <input type="checkbox" id="approved" name="approved" value="true" />
-          Approved
-        </label>
-      </div>
+function extractASIN(s) {
+  if (!s) return null;
+  try {
+    const u = new URL(s, "https://x.invalid");
+    const m =
+      u.pathname.match(/\/dp\/([A-Z0-9]{10})/i) ||
+      u.pathname.match(/\/gp\/product\/([A-Z0-9]{10})/i) ||
+      u.search.match(/[?&]asin=([A-Z0-9]{10})/i);
+    if (m?.[1]) return m[1].toUpperCase();
+  } catch {
+    // fall through to plain text
+  }
+  const m2 = String(s).toUpperCase().match(/\b([A-Z0-9]{10})\b/);
+  return m2 ? m2[1] : null;
+}
 
-      <div class="actions">
-        <button type="submit">Submit</button>
-        <a class="secondary" href="/shop.html"><button type="button" class="secondary">Back to Pantry</button></a>
-      </div>
-    </form>
-
-    <div id="preview" class="wrap"></div>
-  </div>
-
-  <!-- Amazon fetch wiring (clears Amazon-origin fields before filling) -->
-  <script>
-    (function () {
-      const btn = document.getElementById('fetchAmazon');
-      const statusEl = document.getElementById('fetchStatus');
-      const byName = (n) => document.querySelector(\`[name="\${n}"]\`);
-
-      function clearAmazonFields() {
-        // Fields that are sourced from Amazon and should be reset each fetch
-        const toClear = [
-          'amazon_title',
-          'amazon_desc',
-          'image_main',
-          'image_small',
-          'image_extra_1',
-          'image_extra_2',
-          'amazon_category'
-        ];
-        toClear.forEach(n => { const el = byName(n); if (el) el.value = ''; });
-      }
-
-      async function doFetch() {
-        const inputEl = document.getElementById('affiliate_link');
-        let input = (inputEl?.value || '').trim();
-        if (!input) {
-          input = prompt('Paste an Amazon URL or ASIN:') || '';
-          input = input.trim();
-          if (!input) return;
-          if (inputEl) inputEl.value = input;
-        }
-
-        // reset stale Amazon-origin values before we fill
-        clearAmazonFields();
-
-        statusEl.textContent = 'Fetching product details…';
-        btn.disabled = true;
-        try {
-          const r = await fetch('/api/admin/amazon-fetch', {
-            method:'POST',
-            headers:{ 'Content-Type':'application/json' },
-            body: JSON.stringify({ input })
-          });
-
-          // robust error if response isn't JSON
-          const ct = r.headers.get('content-type') || '';
-          const payload = ct.includes('application/json') ? await r.json() : { error:{ message: await r.text() } };
-
-          if (!r.ok) throw new Error(payload?.error?.message || 'Fetch failed');
-
-          const s = payload.scraped || {};
-          const setIfEmpty = (name, val) => {
-            if (!val) return;
-            const el = byName(name);
-            if (el && !el.value) el.value = val;
-          };
-
-          setIfEmpty('amazon_title', s.amazon_title);
-          setIfEmpty('amazon_desc',  s.amazon_desc);
-          setIfEmpty('image_main',   s.image_main);
-          setIfEmpty('image_small',  s.image_small || s.image_main);
-          setIfEmpty('image_extra_1', s.image_extra_1);
-          setIfEmpty('image_extra_2', s.image_extra_2);
-          setIfEmpty('amazon_category', s.amazon_category);
-
-          // Helpful defaults for your own fields
-          setIfEmpty('my_title', s.amazon_title);
-          const short = byName('my_description_short');
-          if (short && !short.value && s.amazon_desc) short.value = s.amazon_desc.slice(0, 240);
-
-          statusEl.textContent = 'Filled from Amazon. Review fields, then Submit.';
-        } catch (err) {
-          alert('Fetch failed: ' + err.message);
-          statusEl.textContent = 'Fetch failed.';
-        } finally {
-          btn.disabled = false;
-        }
-      }
-
-      // If the affiliate link changes, clear Amazon fields so we don't carry stale data
-      document.getElementById('affiliate_link')?.addEventListener('input', () => {
-        statusEl.textContent = '';
-        clearAmazonFields();
-      });
-
-      btn?.addEventListener('click', doFetch);
-    })();
-  </script>
-
-  <!-- Submit to admin product-upsert -->
-  <script>
-    (function () {
-      const form = document.getElementById('productForm');
-      const preview = document.getElementById('preview');
-
-      form.addEventListener('submit', async (e) => {
-        e.preventDefault();
-        const fd = new FormData(form);
-        const data = Object.fromEntries(fd.entries());
-
-        data.approved = !!fd.get('approved');
-        if (data.commission_l !== '' && data.commission_l != null) {
-          const n = Number(data.commission_l);
-          data.commission_l = Number.isFinite(n) ? n : null;
-        } else {
-          data.commission_l = null;
-        }
-
-        try {
-          const res = await fetch('/api/admin/product-upsert', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(data)
-          });
-          const out = await res.json();
-          if (!res.ok) {
-            console.error(out);
-            return alert((out && out.error) ? '❌ ' + out.error : '❌ Insert failed');
-          }
-
-          const row = out.product || data;
-          preview.style.display = 'block';
-          preview.innerHTML = `
-            <h3>✅ Product Preview</h3>
-            <p><strong>${row.my_title || ''}</strong><br><em>${row.my_subtitle || ''}</em></p>
-            ${row.image_main ? `<img src="${row.image_main}" alt="Preview" style="max-width:100%;border-radius:8px" />` : ''}
-            <p>${row.my_description_short || ''}</p>
-            <p><small>product_num: <code>${row.product_num || ''}</code></small></p>
-          `;
-          form.reset();
-          alert('✅ Saved!');
-        } catch (err) {
-          console.error(err);
-          alert('❌ Failed to add product.');
-        }
-      });
-    })();
-  </script>
-</body>
-</html>
+function slugify(s = "") {
+  return s
+    .toLowerCase()
+    .normalize("NFKD").replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/(^-|-$)+/g, "")
+    .slice(0, 24);
+}
