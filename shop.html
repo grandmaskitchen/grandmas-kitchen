@@ -1,100 +1,63 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Grandma’s Pantry • Shop</title>
-  <link rel="stylesheet" href="/style.css" />
-  <style>
-    /* Optional: tiny skeleton while loading */
-    .skeleton{background:linear-gradient(90deg,#eee 25%,#f5f5f5 37%,#eee 63%);background-size:400% 100%;animation:shimmer 1.2s infinite}
-    @keyframes shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
-    .skeleton.img{width:200px;height:200px;border-radius:12px;margin:0 auto 10px}
-    .skeleton.text{height:16px;border-radius:8px;margin:6px 0}
-  </style>
-</head>
-<body>
-
-<header class="container center">
-  <a href="/index.html">
-    <img src="/images/logo.jpg" alt="Grandma’s Kitchen Logo" style="max-height:100px;margin-bottom:1rem;">
-  </a>
-  <nav aria-label="Primary">
-    <a href="/index.html">Home</a>
-    <a href="/about.html">About</a>
-    <a href="/recipes.html">Recipes</a>
-    <a href="/shop.html" aria-current="page">Shop</a>
-  </nav>
-  <p class="lead">Staples we actually use at home—simple, honest ingredients.</p>
-</header>
-
-<main>
-  <div class="container container--narrow">
-    <h1>🛒 Grandma’s Pantry</h1>
-  </div>
-
-  <div class="container">
-    <div id="grid" class="grid grid-2">
-      <!-- Skeleton placeholders shown first -->
-      <article class="card">
-        <div class="skeleton img"></div>
-        <div class="skeleton text" style="width:60%"></div>
-        <div class="skeleton text" style="width:90%"></div>
-        <div class="skeleton text" style="width:40%"></div>
-      </article>
-      <article class="card">
-        <div class="skeleton img"></div>
-        <div class="skeleton text" style="width:70%"></div>
-        <div class="skeleton text" style="width:85%"></div>
-        <div class="skeleton text" style="width:45%"></div>
-      </article>
-    </div>
-  </div>
-</main>
-
-<footer class="container container--narrow">
-  <p>© 2025 Grandma’s Kitchen • All rights reserved</p>
-  <p class="affiliate-note">As an Amazon Associate, we (Grandma's Kitchen) earn from qualifying purchases.</p>
-</footer>
-
 <script>
 (async function () {
   const grid = document.getElementById('grid');
   const esc = s => (s||'').replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m]));
 
   try {
-    const r = await fetch('/api/shop-list?limit=100');
-    const { items, error } = await r.json();
-    if (!r.ok || !Array.isArray(items)) throw new Error(error || 'Failed to load');
+    // New endpoint (approved products). Works with multiple shapes.
+    const res  = await fetch('/api/products-list?approved=true', { headers: { 'Accept': 'application/json' } });
+    const data = await res.json();
 
-    if (!items.length) {
+    // Accept: [{...}] OR {products:[...]} OR {items:[...]}
+    const rows = Array.isArray(data) ? data : (data.products || data.items || []);
+    if (!Array.isArray(rows)) throw new Error('Unexpected response');
+
+    // Client-side dedupe (newest wins) by product_num (case-insensitive)
+    const seen = new Set();
+    const products = [];
+    for (const p of rows) {
+      const key = (p.product_num || '').toLowerCase();
+      if (key) {
+        if (seen.has(key)) continue;
+        seen.add(key);
+      }
+      products.push(p);
+    }
+
+    if (!products.length) {
       grid.innerHTML = `<p class="muted">No products yet.</p>`;
       return;
     }
 
-    grid.innerHTML = items.map(p => {
+    grid.innerHTML = products.map(p => {
       const title = p.my_title || p.amazon_title || 'Product';
-      const img = p.image_main || '';
-      const slug = p.product_num || '';
-      const cat = p.amazon_category || '';
+      const img   = p.image_main || '';
+      const slug  = (p.product_num || '').toString();
+      const cat   = p.amazon_category || '';
+
+      // Prefer your affiliate link if present; otherwise fall back to a local page
+      const href       = (p.affiliate_link || '').trim() || `/products/${encodeURIComponent(slug)}`;
+      const isAmazon   = /amzn\.to|amazon\./i.test(href);
+      const relAttrs   = isAmazon ? 'rel="nofollow sponsored noopener"' : '';
+      const targetAttr = isAmazon ? 'target="_blank"' : '';
+      const ctaLabel   = isAmazon ? 'View on Amazon' : 'View product';
+
       return `
-        <article class="card" aria-labelledby="prod-${esc(slug)}-title">
-          <a class="product-image" href="/products/${encodeURIComponent(slug)}">
+        <article class="card" aria-labelledby="prod-${esc(slug || title)}-title">
+          <a class="product-image" href="${esc(href)}" ${relAttrs} ${targetAttr}>
             ${img ? `<img loading="lazy" decoding="async" src="${esc(img)}" alt="${esc(title)}">` : ''}
           </a>
-          <h3 id="prod-${esc(slug)}-title" class="product-title">
-            <a href="/products/${encodeURIComponent(slug)}">${esc(title)}</a>
+          <h3 id="prod-${esc(slug || title)}-title" class="product-title">
+            <a href="${esc(href)}" ${relAttrs} ${targetAttr}>${esc(title)}</a>
           </h3>
           ${cat ? `<p class="muted" style="margin:.25rem 0 .5rem">${esc(cat)}</p>` : ''}
-          <p><a class="btn" href="/products/${encodeURIComponent(slug)}">View product</a></p>
+          <p><a class="btn" href="${esc(href)}" ${relAttrs} ${targetAttr}>${ctaLabel}</a></p>
         </article>
       `;
     }).join('');
   } catch (err) {
-    console.error(err);
+    console.error('Shop render failed:', err);
     grid.innerHTML = `<p class="muted">Sorry, the shop is unavailable right now.</p>`;
   }
 })();
 </script>
-</body>
-</html>
