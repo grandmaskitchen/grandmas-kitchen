@@ -10,6 +10,19 @@ export const onRequestOptions = ({ request }) =>
       "Access-Control-Allow-Headers": "Content-Type"
     }
   });
+<td>
+  <label>
+    <input
+      type="checkbox"
+      class="appr"
+      data-id="${p.id}"
+      ${p.approved ? "checked" : ""}
+      aria-label="Approve ${p.my_title || p.amazon_title || ''}">
+  </label>
+  <span class="muted status" data-id="${p.id}">
+    ${p.approved ? "Approved" : "Pending"}
+  </span>
+</td>
 
 export const onRequestPost = async ({ request, env }) => {
   try {
