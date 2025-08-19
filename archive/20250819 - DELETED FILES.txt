@@ -1,0 +1,572 @@
+20250819 - DELETED FILES
+
+functions/api/products.js
+
+// GET /api/product?slug=acv001  -> { product: {...} }  (404 if not approved)
+
+export const onRequestGet = async ({ request, env }) => {
+  const u = new URL(request.url);
+  const slug = (u.searchParams.get('slug') || '').trim();
+  if (!slug) return json({ error: 'slug required' }, 400);
+
+  const sel = [
+    'id','product_num','affiliate_link','approved','added_by','created_at',
+    'product_content(*)'
+  ].join(',');
+
+  const url =
+    `${env.SUPABASE_URL}/rest/v1/products` +
+    `?product_num=eq.${encodeURIComponent(slug)}` +
+    `&select=${encodeURIComponent(sel)}` +
+    `&limit=1`;
+
+  const r = await fetch(url, {
+    headers: {
+      apikey: env.SUPABASE_SERVICE_ROLE_KEY,
+      Authorization: `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}`
+    }
+  });
+  const rows = await r.json();
+  if (!r.ok) return json({ error: rows?.message || 'Fetch failed' }, 400);
+
+  const row = rows?.[0];
+  if (!row || !row.approved) return json({ error: 'Not found' }, 404);
+
+  // flatten content
+  const c = row.product_content || {};
+  const product = {
+    id: row.id,
+    slug: row.product_num,
+    affiliate_link: row.affiliate_link || null,
+    my_title: c.my_title || null,
+    my_subtitle: c.my_subtitle || null,
+    my_description_short: c.my_description_short || null,
+    my_description_long: c.my_description_long || null,
+    image_main: c.image_main || null,
+    image_small: c.image_small || null,
+    image_extra_1: c.image_extra_1 || null,
+    image_extra_2: c.image_extra_2 || null,
+    features: c.features || null,
+    advantages: c.advantages || null,
+    benefits: c.benefits || null,
+  };
+
+  return new Response(JSON.stringify({ product }), {
+    status: 200,
+    headers: {
+      'Content-Type': 'application/json',
+      'Cache-Control': 'public, s-maxage=120'
+    }
+  });
+};
+
+function json(obj, status = 200) {
+  return new Response(JSON.stringify(obj), {
+    status, headers: { 'Content-Type': 'application/json' }
+  });
+}
+
+functions/api/products-list.js
+
+// /functions/api/products-list.js
+// GET /api/products-list  → approved products for the Shop grid
+
+export const onRequestGet = async ({ request, env }) => {
+  try {
+    const url = new URL(request.url);
+    const limit = Math.min(parseInt(url.searchParams.get("limit") || "100", 10), 200);
+
+    const q = `${env.SUPABASE_URL}/rest/v1/products`
+      + `?select=product_num,my_title,my_subtitle,my_description_short,image_main,affiliate_link`
+      + `&approved=eq.true`
+      + `&order=created_at.desc.nullslast`
+      + `&limit=${limit}`;
+
+    const r = await fetch(q, {
+      headers: {
+        apikey: env.SUPABASE_SERVICE_ROLE_KEY,
+        Authorization: `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}`,
+      },
+    });
+
+    const rows = await r.json();
+    if (!r.ok) {
+      return json({ error: rows?.message || "Query failed" }, 400, 0);
+    }
+
+    return json({ products: rows || [] }, 200, 60); // cache for 60s
+  } catch (err) {
+    return json({ error: err?.message || "Server error" }, 500, 0);
+  }
+};
+
+function json(obj, status = 200, sMaxAge = 0) {
+  return new Response(JSON.stringify(obj), {
+    status,
+    headers: {
+      "Content-Type": "application/json",
+      ...(sMaxAge ? { "Cache-Control": `public, s-maxage=${sMaxAge}` } : {}),
+    },
+  });
+}
+
+functions/products/[slug].js
+
+// Matches /products/<anything> and serves /products/_template.html
+export const onRequestGet = async ({ request, env }) => {
+  const u = new URL(request.url);
+  u.pathname = '/products/_template.html';
+  return env.ASSETS.fetch(new Request(u.toString(), request));
+};
+
+
+form/product_entry_form.html
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Add Product • Grandma's Kitchen (Admin)</title>
+  <meta name="robots" content="noindex, nofollow" />
+  <style>
+    body { font-family: Arial, sans-serif; background: #fffdf8; color: #333; padding: 1rem; margin: 0; }
+    h1 { text-align: center; font-size: 1.5rem; margin-bottom: 1rem; }
+    form { display: grid; gap: 1rem; background: #fff; padding: 1.5rem; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); margin: 0 auto; width: 100%; max-width: 600px; box-sizing: border-box; }
+    label { font-weight: bold; font-size: 0.9rem; }
+    input, textarea, select { width: 100%; padding: 0.6rem; border: 1px solid #ccc; border-radius: 4px; font-size: 1rem; box-sizing: border-box; }
+    button { background-color: #44633f; color: #fff; padding: 0.75rem; border: none; border-radius: 5px; cursor: pointer; font-size: 1rem; }
+    button:hover { background-color: #2e472b; }
+    #preview { background: #f4f4f4; padding: 1rem; border-radius: 6px; margin-top: 2rem; display: none; max-width: 600px; margin-inline: auto; }
+    img { max-width: 100%; height: auto; border-radius: 4px; margin-top: 0.5rem; }
+    @media (max-width: 600px) { body { padding: 1rem; } form { padding: 1rem; } h1 { font-size: 1.25rem; } }
+  </style>
+</head>
+<body>
+  <h1>📦 Add a New Product</h1>
+
+  <!-- No client-side login; Cloudflare Access protects this URL -->
+  <form id="productForm" autocomplete="off">
+    <label>Manufacturer</label>
+    <input name="manufacturer" required />
+
+    <label>My Product #</label>
+    <input name="product_num" required />
+
+    <label>Affiliate Link (Amazon)</label>
+    <input name="affiliate_link" type="url" required placeholder="https://amzn.to/... or https://www.amazon.co.uk/..." />
+
+    <label>Amazon Title</label>
+    <input name="amazon_title" />
+
+    <label>Amazon Description</label>
+    <textarea name="amazon_desc"></textarea>
+
+    <label>My Title</label>
+    <input name="my_title" required />
+
+    <label>My Subtitle</label>
+    <input name="my_subtitle" />
+
+    <label>Short Description</label>
+    <textarea name="my_description_short"></textarea>
+
+    <label>Long Description</label>
+    <textarea name="my_description_long"></textarea>
+
+    <label>Main Image URL</label>
+    <input name="image_main" type="url" required placeholder="https://..." />
+
+    <label>Small Image URL (3×3cm)</label>
+    <input name="image_small" type="url" />
+
+    <label>Extra Image 1 URL</label>
+    <input name="image_extra_1" type="url" />
+
+    <label>Extra Image 2 URL</label>
+    <input name="image_extra_2" type="url" />
+
+    <label>Where Advertised</label>
+    <input name="where_advertised" placeholder="Instagram, Facebook" />
+
+    <label>Ad Type</label>
+    <select name="ad_type">
+      <option value="organic">Organic</option>
+      <option value="paid">Paid</option>
+      <option value="unpaid">Unpaid</option>
+    </select>
+
+    <label>Added By (optional — will be set from your Access email)</label>
+    <input name="added_by" placeholder="leave blank" />
+
+    <label>Amazon Category</label>
+    <input name="amazon_category" />
+
+    <label>Product Type</label>
+    <select name="product_type">
+      <option value="powder">Powder</option>
+      <option value="tablet">Tablet</option>
+      <option value="pill">Pill</option>
+      <option value="liquid">Liquid</option>
+    </select>
+
+    <label>Commission %</label>
+    <input name="commission_l" type="number" step="0.01" placeholder="e.g. 2" />
+
+    <label style="display:flex;align-items:center;gap:.5rem;">
+      <input type="checkbox" name="approved" value="true" />
+      Mark as approved
+    </label>
+
+    <button type="submit">Submit Product</button>
+  </form>
+
+  <div id="preview"></div>
+
+  <script type="module">
+    const form = document.getElementById('productForm');
+    const preview = document.getElementById('preview');
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+
+      const fd = new FormData(form);
+      const data = Object.fromEntries(fd.entries());
+      // Coerce checkbox & number
+      data.approved = fd.get('approved') ? true : false;
+      if (data.commission_l !== '' && data.commission_l != null)
+        data.commission_l = Number(data.commission_l);
+
+      // Basic validation
+      if (!data.my_title?.trim()) return alert('Title is required');
+      try { new URL(data.image_main); } catch { return alert('Main Image URL is invalid'); }
+      if (data.affiliate_link && !/^(https?:\/\/)(amzn\.to|www\.amazon\.)/i.test(data.affiliate_link))
+        return alert('Affiliate link must be an Amazon URL');
+
+      const res = await fetch('/api/products', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+      });
+
+      if (!res.ok) {
+        const err = await res.text();
+        console.error(err);
+        return alert('❌ Failed to add product.');
+      }
+
+      const result = await res.json();
+      const row = result?.product || data;
+
+      // Safe preview
+      preview.replaceChildren();
+      const h = document.createElement('h3'); h.textContent = '✅ Product Preview';
+      const t = document.createElement('p');
+      const strong = document.createElement('strong'); strong.textContent = row.my_title || '';
+      const br = document.createElement('br');
+      const em = document.createElement('em'); em.textContent = row.my_subtitle || '';
+      t.append(strong, br, em);
+      const img = document.createElement('img'); img.src = row.image_main; img.alt = 'Preview';
+      const p = document.createElement('p'); p.textContent = row.my_description_short || '';
+      preview.append(h, t, img, p);
+      preview.style.display = 'block';
+
+      form.reset();
+    });
+  </script>
+</body>
+</html>
+
+product-page-template/producttemplate.html
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>XXXXXXXXXXXXXXXXX• Grandma’s Pantry</title>
+  <link rel="stylesheet" href="/style.css" />
+  <style>
+    /* page-specific tweak: bigger square hero on the detail page */
+    .product-hero{ max-width:340px; margin:0 auto 1rem; }
+    @media (max-width:600px){ .product-hero{ max-width:320px; } }
+  </style>
+</head>
+<body>
+
+<header class="container center">
+  <a href="/index.html">
+    <img src="/images/logo.jpg" alt="Grandma’s Kitchen Logo" style="max-height:100px;margin-bottom:1rem;">
+  </a>
+  <nav aria-label="Primary">
+    <a href="/index.html">Home</a>
+    <a href="/about.html">About</a>
+    <a href="/recipes.html">Recipes</a>
+    <a href="/shop.html" aria-current="page">Shop</a>
+  </nav>
+  <p>Simple food. Lifelong health. Inspired by a 104-year legacy.</p>
+</header>
+
+<main>
+  <div class="container container--narrow">
+    <article aria-labelledby="prod-title">
+      <a class="product-image product-hero">
+        <img
+          src="https://m.media-amazon.com/images/I/713+vatU3qL._AC_SL1500_.jpg"
+          alt="Raw, unfiltered apple cider vinegar bottle"
+          loading="lazy" decoding="async">
+      </a>
+
+      <h1 id="prod-title">Apple Cider Vinegar</h1>
+      <p class="lead">Raw, unfiltered, with the live “mother” — a simple pantry staple for dressings and daily tonics.</p>
+
+      <h2>Why we like it</h2>
+      <ul>
+        <li>Unfiltered & unpasteurised with the live “mother”.</li>
+        <li>Naturally fermented; clean, bright flavour.</li>
+        <li>Great in vinaigrettes or diluted in water.</li>
+        <li>Glass bottle to preserve purity.</li>
+      </ul>
+
+      <p>
+        <!-- Use your Associates link; include your tag -->
+        <a class="btn btn-accent"
+           href="https://www.amazon.co.uk/s?k=apple+cider+vinegar&tag=contentwrit05-21"
+           target="_blank" rel="noopener sponsored nofollow">Buy on Amazon</a>
+        <a class="btn" href="/shop.html" style="margin-left:.5rem;">← Back to Pantry</a>
+      </p>
+
+      <p style="font-size:.9rem;color:#666;margin-top:.5rem;">
+        As an Amazon Associate, we earn from qualifying purchases.
+      </p>
+    </article>
+  </div>
+</main>
+
+<footer class="container container--narrow">
+  <p>© 2025 Grandma’s Kitchen • All rights reserved</p>
+</footer>
+
+</body>
+</html>
+
+products/_template.html
+
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Grandma’s Kitchen • Product</title>
+  <meta name="description" content="Grandma’s Kitchen product detail." />
+  <link rel="stylesheet" href="/style.css" />
+  <style>
+    .container{max-width:860px;margin:1.25rem auto;padding:0 16px}
+    .hero{display:grid;grid-template-columns:1fr 1fr;gap:18px;align-items:start}
+    .hero img{max-width:100%;border-radius:10px}
+    @media (max-width:720px){.hero{grid-template-columns:1fr}}
+    .fab{margin-top:1.25rem;padding-top:.5rem;border-top:1px solid #eee}
+    .fab h2{font-size:1.1rem;margin:.75rem 0 .4rem}
+    .fab ul{margin:.25rem 0 .75rem 1.25rem}
+    .fab li{margin:.25rem 0}
+    .muted{color:#666}
+    .hidden{display:none}
+    .cta-block{margin-top:12px}
+  </style>
+</head>
+<body>
+  <main class="container">
+    <a href="/shop.html" class="muted">← Back to Pantry</a>
+    <h1 id="p-title">Loading…</h1>
+
+    <section class="hero">
+      <img id="p-image" src="" alt="" />
+      <div>
+        <p id="p-short" class="muted"></p>
+
+        <div id="cta" class="cta-block hidden">
+          <p style="margin-top:.75rem">
+            <a id="p-buy" class="btn btn-accent" href="#" target="_blank" rel="noopener sponsored nofollow">Buy on Amazon</a>
+          </p>
+          <p class="affiliate-note">As an Amazon Associate, we earn from qualifying purchases.</p>
+        </div>
+
+        <!-- FAB -->
+        <section class="fab" aria-labelledby="fab-heading">
+          <h2 id="fab-heading">Features</h2>
+          <ul id="p-features"></ul>
+
+          <h2>Advantages</h2>
+          <p id="p-advantages"></p>
+
+          <h2>Benefits</h2>
+          <p id="p-benefits"></p>
+        </section>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    (async function () {
+      // slug from URL: /products/acv001 or /products/acv001.html
+      let slug = location.pathname.split('/').pop() || '';
+      slug = slug.replace(/\.html$/i, '');
+
+      const $ = (id) => document.getElementById(id);
+      const setText = (id, txt) => { const el = $(id); if (el) el.textContent = (txt || '').trim(); };
+      const setImage = (id, src, alt) => {
+        const el = $(id);
+        if (!el) return;
+        if (src) { el.src = src; el.alt = alt || ''; } else { el.style.display = 'none'; }
+      };
+      const toBullets = (txt) => (txt || '').split(/\r?\n/).map(s => s.trim()).filter(Boolean);
+
+      try {
+        const r = await fetch(`/api/product?slug=${encodeURIComponent(slug)}`);
+        const { product, error } = await r.json();
+        if (!r.ok || !product) throw new Error(error || 'Not found');
+
+        setText('p-title', product.my_title || 'Product');
+        setImage('p-image', product.image_main, product.my_title);
+
+        // Short blurb: first line of advantages or short description
+        const short =
+          (product.advantages || '').split(/\r?\n/)[0] ||
+          product.my_description_short || '';
+        setText('p-short', short);
+
+        // FAB
+        const feats = toBullets(product.features);
+        const ul = $('p-features');
+        if (feats.length && ul) {
+          ul.innerHTML = feats.map(li => `<li>${li}</li>`).join('');
+        } else {
+          ul?.parentElement?.style && (ul.parentElement.style.display = 'none');
+        }
+        const adv = (product.advantages || '').trim();
+        const ben = (product.benefits || '').trim();
+        if (adv) setText('p-advantages', adv); else $('p-advantages')?.parentElement && ($('p-advantages').parentElement.style.display = 'none');
+        if (ben) setText('p-benefits', ben); else $('p-benefits')?.parentElement && ($('p-benefits').parentElement.style.display = 'none');
+
+        // CTA
+        if (product.affiliate_link) {
+          const buy = $('p-buy'); buy.href = product.affiliate_link;
+          $('cta')?.classList.remove('hidden');
+        }
+      } catch (err) {
+        setText('p-title', 'Product not found');
+        $('p-image').style.display = 'none';
+        document.querySelector('.fab').style.display = 'none';
+        $('cta')?.classList.add('hidden');
+      }
+    })();
+  </script>
+</body>
+</html>
+
+scripts/admin-list.js
+
+// scripts/admin-list.js
+(() => {
+  const rowsEl = document.getElementById('rows') || document.querySelector('#rows');
+  if (!rowsEl) return;
+
+  rowsEl.addEventListener('change', async (e) => {
+    if (!e.target.matches('input.appr')) return;
+
+    const cb = e.target;
+    const id = Number(cb.dataset.id);
+    const approved = cb.checked;
+    const status = document.querySelector(`.status[data-id="${id}"]`);
+    const prevText = status?.textContent ?? '';
+
+    cb.disabled = true;
+    if (status) status.textContent = 'Saving…';
+
+    try {
+      const r = await fetch('/api/admin/product-approve', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, approved })
+      });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j?.error || 'Approve failed');
+
+      if (status) status.textContent = approved ? 'Approved' : 'Pending';
+    } catch (err) {
+      alert(err.message || 'Failed to update approval');
+      cb.checked = !approved; // revert
+      if (status) status.textContent = prevText || (cb.checked ? 'Approved' : 'Pending');
+    } finally {
+      cb.disabled = false;
+    }
+  });
+})();
+
+scripts/form-submit.js
+
+// scripts/form-submit.js
+(() => {
+  // TEMP login gate (replace with Cloudflare Access when ready)
+  const credentials = { username: 'admin', password: 'letmein123' };
+
+  const loginForm   = document.getElementById('loginForm');
+  const productForm = document.getElementById('productForm');
+  const preview     = document.getElementById('preview');
+
+  loginForm?.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const u = document.getElementById('username').value.trim();
+    const p = document.getElementById('password').value.trim();
+    if (u === credentials.username && p === credentials.password) {
+      loginForm.style.display = 'none';
+      productForm.style.display = 'grid';
+    } else {
+      alert('❌ Incorrect login. Please try again.');
+    }
+  });
+
+  productForm?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+
+    const fd   = new FormData(productForm);
+    const data = Object.fromEntries(fd.entries());
+
+    // booleans / coercions
+    data.approved = !!fd.get('approved');
+    if (data.commission_l !== '' && data.commission_l != null) {
+      const n = Number(data.commission_l);
+      data.commission_l = Number.isFinite(n) ? n : null;
+    } else {
+      data.commission_l = null;
+    }
+
+    // IMPORTANT: use exactly what the user typed for the affiliate link
+    data.affiliate_link = (document.getElementById('affiliate_link')?.value || '').trim();
+
+    try {
+      const res = await fetch('/api/admin/product-upsert', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      });
+      const out = await res.json();
+      if (!res.ok) throw new Error(out?.error || 'Insert failed');
+
+      const row = out.product || data;
+      preview.style.display = 'block';
+      preview.innerHTML = `
+        <h3>✅ Product saved</h3>
+        <p><strong>${row.my_title || ''}</strong><br><em>${row.my_subtitle || ''}</em></p>
+        ${row.image_main ? `<img src="${row.image_main}" alt="Preview" style="max-width:100%;border-radius:8px">` : ''}
+        <p>${row.my_description_short || ''}</p>
+        <p><small>product_num: <code>${row.product_num || ''}</code></small></p>
+      `;
+      productForm.reset();
+      alert('✅ Saved!');
+    } catch (err) {
+      console.error(err);
+      alert('❌ Failed to add product: ' + (err.message || 'unknown error'));
+    }
+  });
+})();
