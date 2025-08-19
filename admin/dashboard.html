@@ -1,1 +1,90 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Admin • Products</title>
+  <meta name="robots" content="noindex,nofollow" />
+  <link rel="stylesheet" href="/style.css">
+  <style>
+    body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;padding:20px}
+    table{width:100%;border-collapse:collapse}
+    th,td{padding:8px;border-bottom:1px solid #eee;text-align:left}
+    .controls{display:flex;gap:8px;align-items:center;margin:10px 0}
+    input,select{padding:.45rem;border:1px solid #ccc;border-radius:6px}
+    button{padding:.45rem .7rem;border:0;border-radius:6px;background:#44633F;color:#fff;cursor:pointer}
+    button.secondary{background:#ddd;color:#222}
+    .muted{color:#666}
+  </style>
+</head>
+<body>
+  <h1>Admin • Products</h1>
+  <div class="controls">
+    <label>Approved
+      <select id="filterApproved">
+        <option value="all">All</option>
+        <option value="true">Approved</option>
+        <option value="false">Pending</option>
+      </select>
+    </label>
+    <input id="search" placeholder="Search title…" />
+    <button id="refresh">Refresh</button>
+    <span class="muted" id="count"></span>
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Title</th><th>ASIN/Num</th><th>Approved</th><th>Added by</th><th>Date</th><th>Actions</th>
+      </tr>
+    </thead>
+    <tbody id="rows"></tbody>
+  </table>
+
+  <script>
+    const $ = (s)=>document.querySelector(s);
+    const rows = $('#rows'); const count = $('#count');
+
+    async function load() {
+      const approved = $('#filterApproved').value;
+      const search = $('#search').value.trim();
+      const params = new URLSearchParams({ approved, limit: '100', order:'created_at.desc' });
+      if (search) params.set('search', search);
+      const r = await fetch('/api/admin/products?' + params.toString());
+      const j = await r.json();
+      if (!r.ok) { alert(j.error || 'Load failed'); return; }
+      count.textContent = `${j.total} total`;
+      rows.innerHTML = (j.products || []).map(p => `
+        <tr>
+          <td>${esc(p.my_title || p.amazon_title || '')}</td>
+          <td><code>${esc(p.product_num || '')}</code></td>
+          <td>${p.approved ? '✅' : '⏳'}</td>
+          <td>${esc(p.added_by || '')}</td>
+          <td>${p.created_at ? new Date(p.created_at).toLocaleString() : ''}</td>
+          <td>
+            <button onclick="approve('${p.id}','${p.product_num||''}')">Approve</button>
+            <button class="secondary" onclick="delRow('${p.id}','${p.product_num||''}')">Delete</button>
+          </td>
+        </tr>
+      `).join('');
+    }
+
+    async function approve(id, num) {
+      const r = await fetch('/api/admin/product-approve', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ id: Number(id)||undefined, product_num: num||undefined, approved: true }) });
+      const j = await r.json(); if (!r.ok) return alert(j.error||'Approve failed'); load();
+    }
+    async function delRow(id, num) {
+      if (!confirm('Delete this product?')) return;
+      const r = await fetch('/api/admin/product-delete', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ id: Number(id)||undefined, product_num: num||undefined }) });
+      const j = await r.json(); if (!r.ok) return alert(j.error||'Delete failed'); load();
+    }
+    function esc(s){ return String(s).replace(/[&<>"]/g, c=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
+
+    $('#refresh').onclick = load;
+    $('#filterApproved').onchange = load;
+    $('#search').onkeydown = (e)=>{ if(e.key==='Enter') load(); };
+
+    load();
+  </script>
+</body>
+</html>
 
