@@ -1,36 +1,26 @@
-// /functions/api/admin/amazon-fetch.js
-// POST { input: "<amazon url | amzn.to short link | ASIN>" }
-// -> { scraped: {...}, meta: { asin, url } }
-
-export const onRequestGet = () =>
-  json({ ok: true, expects: "POST { input }" }, 200);
+// Cloudflare Pages Function: POST /api/admin/amazon-fetch
+// Input: { input: "<amazon url | amzn.to short link | ASIN>" }
+// Output: { scraped: { amazon_title, amazon_desc, image_main, image_small, image_extra_1, image_extra_2, amazon_category } }
 
 export const onRequestOptions = ({ request }) =>
   new Response(null, {
     status: 204,
     headers: {
       "Access-Control-Allow-Origin": request.headers.get("Origin") || "*",
-      "Access-Control-Allow-Methods": "POST, OPTIONS, GET",
+      "Access-Control-Allow-Methods": "POST, OPTIONS",
       "Access-Control-Allow-Headers": "Content-Type"
     }
   });
 
 export const onRequestPost = async ({ request }) => {
   try {
-    let payload = {};
-    try {
-      payload = await request.json();
-    } catch {
-      return json({ error: { message: "Bad JSON body" } }, 400);
-    }
-
-    const input = String(payload.input || "").trim();
+    const { input } = await request.json();
     if (!input) return json({ error: { message: "Missing input" } }, 400);
 
-    // 1) Resolve amzn.to etc.
+    // 1) Resolve amzn.to etc. (follows redirects)
     const resolved = await resolveLink(input);
 
-    // 2) Extract ASIN/URL
+    // 2) Extract ASIN or product URL
     const { asin, url } = parseAsinOrUrl(resolved);
     if (!asin && !url) {
       return json({ error: { message: "Could not find an ASIN or product URL" } }, 400);
@@ -38,27 +28,20 @@ export const onRequestPost = async ({ request }) => {
 
     // 3) Fetch HTML
     const finalUrl = url || `https://www.amazon.co.uk/dp/${asin}`;
-    let html;
-    try {
-      html = await fetchHtml(finalUrl);
-    } catch (e) {
-      return json(
-        { error: { message: String(e?.message || e).slice(0, 200) }, url: finalUrl },
-        502
-      );
-    }
+    const html = await fetchHtml(finalUrl);
 
-    // 4) Scrape
+    // 4) Scrape fields
     const scraped = scrapeAmazon(html, finalUrl);
-    scraped.affiliate_link = finalUrl;
 
-    return json({ scraped, meta: { asin: asin || null, url: finalUrl } });
+    // NOTE: we do NOT overwrite your affiliate_link on the client.
+    // The admin form only uses these to prefill IF the field is empty.
+    return json({ scraped });
   } catch (err) {
     return json({ error: { message: err?.message || "Server error" } }, 500);
   }
 };
 
-/* -------------- helpers -------------- */
+/* ---------------- helpers ---------------- */
 
 function json(obj, status = 200) {
   return new Response(JSON.stringify(obj), {
@@ -73,10 +56,9 @@ async function resolveLink(input) {
     const r = await fetch(u.toString(), {
       redirect: "follow",
       headers: {
-        "User-Agent":
-          "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124 Safari/537.36",
-        "Accept-Language": "en-GB,en;q=0.9",
-        Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+        "User-Agent":"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36",
+        "Accept-Language":"en-GB,en;q=0.9",
+        "Accept":"text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
       }
     });
     return r.url || u.toString();
@@ -103,17 +85,13 @@ async function fetchHtml(url) {
   const r = await fetch(url, {
     redirect: "follow",
     headers: {
-      "User-Agent":
-        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124 Safari/537.36",
-      "Accept-Language": "en-GB,en;q=0.9",
-      Accept: "text/html,*/*"
+      "User-Agent":"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36",
+      "Accept-Language":"en-GB,en;q=0.9",
+      "Accept":"text/html,*/*"
     }
   });
   const text = await r.text();
-  if (!r.ok) {
-    // return a short, readable error (still JSON)
-    throw new Error(`Amazon responded ${r.status}. ${text.slice(0, 160)}`);
-  }
+  if (!r.ok) throw new Error(`Amazon responded ${r.status}. ${text.slice(0, 200)}`);
   return text;
 }
 
@@ -123,41 +101,55 @@ function scrapeAmazon(html, url) {
     return (m && m[1] && decodeHtml(m[1])) || "";
   };
 
+  // Title
   const title =
     get(/<meta\s+property=["']og:title["']\s+content=["']([^"']+)["']/i) ||
     get(/<span\s+id=["']productTitle["'][^>]*>\s*([^<]+)\s*<\/span>/i);
 
+  // Description (fallback to bullets text)
   let desc =
     get(/<meta\s+name=["']description["']\s+content=["']([^"']+)["']/i) || "";
   if (!desc) {
-    const bullets = get(/<div\s+id=["']feature-bullets["'][^>]*>([\s\S]*?)<\/div>/i);
-    if (bullets) {
-      desc = bullets.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+    const bulletsBlock = get(/<div\s+id=["']feature-bullets["'][^>]*>([\s\S]*?)<\/div>/i);
+    if (bulletsBlock) {
+      desc = bulletsBlock.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
     }
   }
 
+  // Features (bullet list)
+  const bulletsSection = html.match(/<div\s+id=["']feature-bullets["'][^>]*>([\s\S]*?)<\/div>/i);
+  let features = [];
+  if (bulletsSection?.[1]) {
+    const liMatches = [...bulletsSection[1].matchAll(/<li[^>]*>\s*<span[^>]*>\s*([^<]+)\s*<\/span>\s*<\/li>/gi)];
+    features = liMatches.map(m => decodeHtml(m[1]).trim()).filter(Boolean);
+  }
+
+  // Images: og:image or image JSON blobs
   const ogImg = get(/<meta\s+property=["']og:image["']\s+content=["']([^"']+)["']/i);
   const jsonLarge = get(/"large"\s*:\s*"((?:https:)?\/\/[^"]+)"/i);
   const jsonHiRes = get(/"hiRes"\s*:\s*"((?:https:)?\/\/[^"]+)"/i);
   const mainImg = ogImg || jsonLarge || jsonHiRes || "";
 
+  // Category (best-effort)
   const crumb =
-    get(/<span\s+class=["']nav-a-content["']>([^<]+)<\/span>\s*<\/a>\s*<\/li>\s*<\/ul>/i) ||
-    get(/"category"\s*:\s*"([^"]+)"/i);
+    get(/"category"\s*:\s*"([^"]+)"/i) ||
+    get(/<a[^>]+class=["'][^"']*breadcrumb[^"']*["'][^>]*>([^<]+)<\/a>/i);
 
   return {
     amazon_title: title || "",
     amazon_desc: desc || "",
     image_main: absolutize(mainImg, url),
-    image_small: "",
+    image_small: "",         // optional
     image_extra_1: "",
     image_extra_2: "",
-    amazon_category: crumb || ""
+    amazon_category: crumb || "",
+    features // array for your Website Admin later (we don’t fill the DB from here)
   };
 }
 
 function decodeHtml(s) {
-  return s.replace(/&quot;/g, '"')
+  return s
+    .replace(/&quot;/g, '"')
     .replace(/&#39;/g, "'")
     .replace(/&amp;/g, "&")
     .replace(/&lt;/g, "<")
