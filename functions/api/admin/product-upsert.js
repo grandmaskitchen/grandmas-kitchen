@@ -1,5 +1,5 @@
 // /functions/api/admin/product-upsert.js
-// POST /api/admin/product-upsert  → upsert into Supabase "products" (on_conflict=product_num)
+// POST /api/admin/product-upsert  ->  { ok:true, product:{...} }
 
 export const onRequestOptions = ({ request }) =>
   new Response(null, {
@@ -16,13 +16,11 @@ export const onRequestPost = async ({ request, env }) => {
   try {
     const incoming = await request.json();
 
-    // Legacy → current names
     const synonyms = {
       amazon_descr: "amazon_desc",
       commission_percentage: "commission_l",
     };
 
-    // Columns we allow
     const allowed = new Set([
       "manufacturer",
       "product_num",
@@ -44,10 +42,8 @@ export const onRequestPost = async ({ request, env }) => {
       "commission_l",
       "approved",
       "added_by",
-      // FAB fields intentionally excluded in this “Product Source Admin”
     ]);
 
-    // Normalize payload ("" → null, drop unknowns)
     const row = {};
     for (const [k, v] of Object.entries(incoming || {})) {
       const dest = synonyms[k] || k;
@@ -55,30 +51,19 @@ export const onRequestPost = async ({ request, env }) => {
       row[dest] = v === "" ? null : v;
     }
 
-    // Keep EXACT Sitestripe link user typed
+    // --- Normalize affiliate_link: accept amzn.to, amazon.* OR bare ASIN ---
     if (typeof incoming.affiliate_link === "string") {
-      row.affiliate_link = incoming.affiliate_link.trim();
+      const raw = incoming.affiliate_link.trim();
+      const asinOnly = raw.toUpperCase().match(/^[A-Z0-9]{10}$/);
+      if (asinOnly) {
+        // turn a bare ASIN into a canonical product URL
+        row.affiliate_link = `https://www.amazon.co.uk/dp/${asinOnly[0]}`;
+      } else {
+        row.affiliate_link = raw;
+      }
     }
 
-    // --- number block: compute product_num (ASIN or slug) -------------------
-    // only if not supplied
-    if (!row.product_num || !String(row.product_num).trim()) {
-      const title = (row.my_title || row.amazon_title || "").trim();
-      const asinFromLink = extractASIN(row.affiliate_link || "");
-      const asinFromTitle = extractASIN(title);
-
-      const picked =
-        asinFromLink ||
-        asinFromTitle ||
-        makeSlug(title) ||
-        // absolute last fallback
-        `sku-${Date.now().toString(36)}`;
-
-      row.product_num = picked.toLowerCase();
-    }
-    // ------------------------------------------------------------------------
-
-    // Coerce types
+    // --- Coerce types ---
     if (row.commission_l != null && row.commission_l !== "") {
       const n = Number(row.commission_l);
       row.commission_l = Number.isFinite(n) ? n : null;
@@ -91,13 +76,13 @@ export const onRequestPost = async ({ request, env }) => {
       row.approved === "on" ||
       row.approved === 1;
 
-    // Access email → added_by (if not provided)
+    // Prefer Cloudflare Access email for added_by
     const accessEmail =
       request.headers.get("Cf-Access-Authenticated-User-Email") ||
       request.headers.get("cf-access-authenticated-user-email");
     if (accessEmail && !row.added_by) row.added_by = accessEmail;
 
-    // Validation
+    // --- Validation ---
     if (!row.my_title || !String(row.my_title).trim()) {
       return json({ error: "my_title is required" }, 400);
     }
@@ -108,14 +93,29 @@ export const onRequestPost = async ({ request, env }) => {
     }
     if (
       row.affiliate_link &&
-      !/^https?:\/\/(amzn\.to|www\.amazon\.)/i.test(row.affiliate_link)
+      !/^([A-Z0-9]{10}|https?:\/\/(amzn\.to|www\.amazon\.))/i.test(row.affiliate_link)
     ) {
       return json({
-        error: "affiliate_link must be an Amazon URL (amzn.to or amazon.*)",
+        error:
+          "affiliate_link must be amzn.to, an amazon.* URL, or a 10-char ASIN",
       }, 400);
     }
 
-    // Upsert
+    // --- product_num: prefer ASIN if we can detect one; else title slug ---
+    if (!row.product_num) {
+      const asin =
+        extractASIN(row.affiliate_link) ||
+        extractASIN(row.amazon_title) ||
+        extractASIN(row.my_title);
+      if (asin) {
+        row.product_num = asin.toLowerCase();
+      } else {
+        row.product_num =
+          slugify(row.my_title) + "-" + Date.now().toString(36).slice(-4);
+      }
+    }
+
+    // ---- Supabase REST upsert (on product_num) ----
     const url = new URL(`${env.SUPABASE_URL}/rest/v1/products`);
     url.searchParams.set("on_conflict", "product_num");
 
@@ -132,7 +132,10 @@ export const onRequestPost = async ({ request, env }) => {
 
     const out = await resp.json();
     if (!resp.ok) {
-      return json({ error: out?.message || "Insert failed", details: out }, 400);
+      return json(
+        { error: out?.message || "Insert failed", details: out },
+        400
+      );
     }
 
     const product = Array.isArray(out) ? out[0] : out;
@@ -149,25 +152,29 @@ function json(obj, status = 200) {
   });
 }
 
-// Extract ASIN from an Amazon URL or any string that might contain one
-function extractASIN(s = "") {
+function extractASIN(s) {
   if (!s) return null;
-  // common URL forms: /dp/ASIN, /gp/product/ASIN, ?asin=ASIN
-  const m =
-    s.match(/\/dp\/([A-Z0-9]{10})/i) ||
-    s.match(/\/gp\/product\/([A-Z0-9]{10})/i) ||
-    s.match(/[?&]asin=([A-Z0-9]{10})/i);
-  return m ? m[1].toUpperCase() : null;
+  const str = String(s);
+  // as URL?
+  try {
+    const u = new URL(str, "https://x.invalid");
+    const m =
+      u.pathname.match(/\/dp\/([A-Z0-9]{10})/i) ||
+      u.pathname.match(/\/gp\/product\/([A-Z0-9]{10})/i) ||
+      u.search.match(/[?&]asin=([A-Z0-9]{10})/i);
+    if (m?.[1]) return m[1].toUpperCase();
+  } catch {}
+  // bare or embedded
+  const m2 = str.toUpperCase().match(/\b([A-Z0-9]{10})\b/);
+  return m2 ? m2[1] : null;
 }
 
-// Make a clean slug from a title (ASCII, hyphens)
-function makeSlug(s = "") {
-  return String(s)
+function slugify(s = "") {
+  return s
     .toLowerCase()
     .normalize("NFKD")
-    .replace(/[\u0300-\u036f]/g, "")      // strip diacritics
-    .replace(/[^a-z0-9]+/g, "-")          // non a-z0-9 → hyphen
-    .replace(/^-+|-+$/g, "")              // trim hyphens
-    .replace(/-{2,}/g, "-")               // collapse
-    .slice(0, 48);
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/(^-|-$)+/g, "")
+    .slice(0, 40);
 }
