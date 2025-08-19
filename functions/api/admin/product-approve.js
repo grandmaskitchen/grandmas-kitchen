@@ -1,5 +1,5 @@
-// POST /api/admin/product-approve  { id?:number, product_num?:string, approved?:boolean }
-// Defaults to approved=true. Returns updated row(s).
+// functions/api/admin/product-approve.js
+// POST /api/admin/product-approve  { id, approved }  -> toggles approved flag
 
 export const onRequestOptions = ({ request }) =>
   new Response(null, {
@@ -7,54 +7,56 @@ export const onRequestOptions = ({ request }) =>
     headers: {
       "Access-Control-Allow-Origin": request.headers.get("Origin") || "*",
       "Access-Control-Allow-Methods": "POST, OPTIONS",
-      "Access-Control-Allow-Headers": "Content-Type"
-    }
+      "Access-Control-Allow-Headers": "Content-Type, Cf-Access-Authenticated-User-Email",
+    },
   });
-<td>
-  <label>
-    <input
-      type="checkbox"
-      class="appr"
-      data-id="${p.id}"
-      ${p.approved ? "checked" : ""}
-      aria-label="Approve ${p.my_title || p.amazon_title || ''}">
-  </label>
-  <span class="muted status" data-id="${p.id}">
-    ${p.approved ? "Approved" : "Pending"}
-  </span>
-</td>
 
 export const onRequestPost = async ({ request, env }) => {
+  let body;
   try {
-    const { id, product_num, approved = true } = await request.json() || {};
-    if (!id && !product_num) return json({ error: "id or product_num required" }, 400);
+    body = await request.json();
+  } catch {
+    return json({ error: "Invalid JSON" }, 400);
+  }
 
-    const qs = new URLSearchParams();
-    if (id) qs.set("id", `eq.${id}`);
-    if (product_num) qs.set("product_num", `eq.${product_num}`);
+  const id = Number(body?.id);
+  const approved =
+    body?.approved === true ||
+    body?.approved === "true" ||
+    body?.approved === 1;
 
-    const resp = await fetch(`${env.SUPABASE_URL}/rest/v1/products?${qs.toString()}`, {
+  if (!Number.isFinite(id)) return json({ error: "id (number) is required" }, 400);
+
+  try {
+    const resp = await fetch(`${env.SUPABASE_URL}/rest/v1/products?id=eq.${id}`, {
       method: "PATCH",
       headers: {
         "Content-Type": "application/json",
         apikey: env.SUPABASE_SERVICE_ROLE_KEY,
         Authorization: `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}`,
-        Prefer: "return=representation"
+        Prefer: "return=representation",
       },
-      body: JSON.stringify({ approved: !!approved })
+      body: JSON.stringify({ approved }),
     });
 
-    const out = await resp.json();
-    if (!resp.ok) return json({ error: out?.message || "Approve failed", details: out }, 400);
-    return json({ ok: true, updated: out });
-  } catch (err) {
-    return json({ error: err?.message || "Server error" }, 500);
+    const text = await resp.text();
+    let out = null;
+    try { out = text ? JSON.parse(text) : null; } catch { out = { raw: text }; }
+
+    if (!resp.ok) {
+      return json({ error: out?.message || "Update failed", details: out }, 400);
+    }
+
+    const row = Array.isArray(out) ? out[0] : out;
+    return json({ ok: true, product: row }, 200);
+  } catch (e) {
+    return json({ error: e?.message || "Server error" }, 500);
   }
 };
 
 function json(obj, status = 200) {
   return new Response(JSON.stringify(obj), {
     status,
-    headers: { "Content-Type": "application/json" }
+    headers: { "Content-Type": "application/json" },
   });
 }
