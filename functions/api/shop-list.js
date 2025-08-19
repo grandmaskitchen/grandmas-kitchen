@@ -7,7 +7,7 @@ export const onRequestGet = async ({ request, env }) => {
   try {
     const url = new URL(request.url);
     const q = (url.searchParams.get("q") || "").trim();
-    const limit = Number(url.searchParams.get("limit") || 100); // sensible default
+    const limit = Number(url.searchParams.get("limit") || 100);
 
     // Only fetch columns the shop needs
     const sb = new URL(`${env.SUPABASE_URL}/rest/v1/products`);
@@ -20,7 +20,7 @@ export const onRequestGet = async ({ request, env }) => {
         "my_description_short",
         "image_main",
         "affiliate_link",
-        "amazon_category",
+        "amazon_category", // used by shop.html
         "approved",
         "created_at",
       ].join(",")
@@ -30,13 +30,9 @@ export const onRequestGet = async ({ request, env }) => {
     if (limit > 0) sb.searchParams.set("limit", String(limit));
 
     if (q) {
-      // PostgREST needs parentheses around OR group
-      // e.g. or=(my_title.ilike.*term*,amazon_title.ilike.*term*)
       const term = `*${q}*`;
-      sb.searchParams.set(
-        "or",
-        `(my_title.ilike.${term},amazon_title.ilike.${term})`
-      );
+      // PostgREST OR needs parentheses
+      sb.searchParams.set("or", `(my_title.ilike.${term},amazon_title.ilike.${term})`);
     }
 
     const r = await fetch(sb.toString(), {
@@ -54,19 +50,18 @@ export const onRequestGet = async ({ request, env }) => {
 
     const rows = await r.json();
 
-    // ---------- DEDUPE by product_num (case-insensitive), newest first ----------
+    // DEDUPE by product_num (case-insensitive), newest wins
     const seen = new Set();
     const unique = [];
     for (const row of rows || []) {
       const key = (row.product_num || "").toLowerCase();
-      if (!key) continue;              // skip rows without a key
-      if (seen.has(key)) continue;     // keep the first (newest due to order)
+      if (!key) continue;           // skip rows without a key
+      if (seen.has(key)) continue;  // already have a newer one
       seen.add(key);
       unique.push(row);
     }
-    // ---------------------------------------------------------------------------
 
-    // Return both keys for backward/forward compatibility
+    // Return BOTH keys so old/new front-ends work
     return json(
       { items: unique, products: unique, count: unique.length },
       200,
