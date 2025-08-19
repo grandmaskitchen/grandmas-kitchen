@@ -44,7 +44,7 @@ export const onRequestPost = async ({ request, env }) => {
       "commission_l",
       "approved",
       "added_by"
-      // (FAB fields now intentionally excluded from this “Product Source Admin”)
+      // (FAB fields intentionally excluded from this “Product Source Admin”)
     ]);
 
     // Normalize + filter unknowns ("" -> null)
@@ -55,7 +55,7 @@ export const onRequestPost = async ({ request, env }) => {
       row[dest] = v === "" ? null : v;
     }
 
-    // IMPORTANT: keep user’s EXACT affiliate_link (short Sitestripe links are okay)
+    // Keep the user's EXACT affiliate_link (short SiteStripe link is fine)
     if (typeof incoming.affiliate_link === "string") {
       row.affiliate_link = incoming.affiliate_link.trim();
     }
@@ -83,20 +83,35 @@ export const onRequestPost = async ({ request, env }) => {
     if (!row.my_title || !String(row.my_title).trim()) {
       return json({ error: "my_title is required" }, 400);
     }
-    try { new URL(row.image_main); } catch {
+    try {
+      new URL(row.image_main);
+    } catch {
       return json({ error: "image_main must be a valid URL" }, 400);
     }
     if (
       row.affiliate_link &&
       !/^https?:\/\/(amzn\.to|www\.amazon\.)/i.test(row.affiliate_link)
     ) {
-      return json({ error: "affiliate_link must be an Amazon URL (amzn.to or amazon.*)" }, 400);
+      return json({
+        error: "affiliate_link must be an Amazon URL (amzn.to or amazon.*)"
+      }, 400);
     }
 
-    // Ensure a product_num for upsert key if user didn’t provide one
+    // --- product_num: prefer ASIN from affiliate_link, else slug ---
     if (!row.product_num) {
-      row.product_num = slugify(row.my_title) + "-" + Date.now().toString(36).slice(-4);
+      const asin =
+        extractASIN(row.affiliate_link) ||
+        extractASIN(row.amazon_title) ||   // very rare; harmless extra check
+        extractASIN(row.my_title) ||       // very rare; harmless extra check
+        null;
+
+      row.product_num = asin
+        ? asin
+        : slugify(row.my_title || row.amazon_title || "sku") +
+          "-" + Date.now().toString(36).slice(-4);
     }
+    // normalize to lowercase to align with unique index on lower(product_num)
+    row.product_num = String(row.product_num).toLowerCase();
 
     // ---- Supabase REST upsert ----
     const url = new URL(`${env.SUPABASE_URL}/rest/v1/products`);
@@ -125,11 +140,18 @@ export const onRequestPost = async ({ request, env }) => {
   }
 };
 
+// ----- helpers -----
 function json(obj, status = 200) {
   return new Response(JSON.stringify(obj), {
     status,
     headers: { "Content-Type": "application/json" }
   });
+}
+
+function extractASIN(s) {
+  if (!s) return null;
+  const m = String(s).match(/(?:\/dp\/|[?&]asin=)([A-Za-z0-9]{10})/i);
+  return m ? m[1].toLowerCase() : null;
 }
 
 function slugify(s = "") {
