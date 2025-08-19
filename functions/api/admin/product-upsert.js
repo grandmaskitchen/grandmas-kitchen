@@ -1,5 +1,5 @@
 // Cloudflare Pages Function: POST /api/admin/product-upsert
-// Upserts into Supabase "products" (on_conflict=product_num) and returns the row.
+// Upserts into Supabase "products" (on_conflict=product_num). No npm deps.
 
 export const onRequestOptions = ({ request }) =>
   new Response(null, {
@@ -15,9 +15,6 @@ export const onRequestOptions = ({ request }) =>
 export const onRequestPost = async ({ request, env }) => {
   try {
     const incoming = await request.json();
-
-    // Preserve EXACT value typed for affiliate_link before we touch anything else
-    const rawAffiliate = (incoming?.affiliate_link || "").trim();
 
     // Map any legacy keys -> current DB names
     const synonyms = {
@@ -46,11 +43,8 @@ export const onRequestPost = async ({ request, env }) => {
       "product_type",
       "commission_l",
       "approved",
-      "added_by",
-      // (ok if unused; harmless to leave)
-      "features",
-      "advantages",
-      "benefits"
+      "added_by"
+      // (FAB fields now intentionally excluded from this “Product Source Admin”)
     ]);
 
     // Normalize + filter unknowns ("" -> null)
@@ -61,8 +55,10 @@ export const onRequestPost = async ({ request, env }) => {
       row[dest] = v === "" ? null : v;
     }
 
-    // Force affiliate_link to EXACT user input
-    row.affiliate_link = rawAffiliate || null;
+    // IMPORTANT: keep user’s EXACT affiliate_link (short Sitestripe links are okay)
+    if (typeof incoming.affiliate_link === "string") {
+      row.affiliate_link = incoming.affiliate_link.trim();
+    }
 
     // Coerce types
     if (row.commission_l != null && row.commission_l !== "") {
@@ -83,35 +79,23 @@ export const onRequestPost = async ({ request, env }) => {
       request.headers.get("cf-access-authenticated-user-email");
     if (accessEmail && !row.added_by) row.added_by = accessEmail;
 
-    // Basic validation (matches your table NOT NULLs)
+    // Basic validation
     if (!row.my_title || !String(row.my_title).trim()) {
       return json({ error: "my_title is required" }, 400);
     }
-    try {
-      new URL(row.image_main);
-    } catch {
+    try { new URL(row.image_main); } catch {
       return json({ error: "image_main must be a valid URL" }, 400);
     }
-    // Accept amzn.to or amazon.* with/without "www."
     if (
       row.affiliate_link &&
-      !/^(https?:\/\/)(amzn\.to|(?:www\.)?amazon\.)/i.test(row.affiliate_link)
+      !/^https?:\/\/(amzn\.to|www\.amazon\.)/i.test(row.affiliate_link)
     ) {
-      return json({ error: "affiliate_link must be an Amazon URL" }, 400);
+      return json({ error: "affiliate_link must be an Amazon URL (amzn.to or amazon.*)" }, 400);
     }
 
-    // Ensure a product_num (prefer ASIN if present)
+    // Ensure a product_num for upsert key if user didn’t provide one
     if (!row.product_num) {
-      const asin =
-        extractASIN(row.affiliate_link) ||
-        extractASIN(row.amazon_title) ||
-        extractASIN(row.my_title);
-      if (asin) {
-        row.product_num = asin.toLowerCase();
-      } else {
-        row.product_num =
-          slugify(row.my_title) + "-" + Date.now().toString(36).slice(-4);
-      }
+      row.product_num = slugify(row.my_title) + "-" + Date.now().toString(36).slice(-4);
     }
 
     // ---- Supabase REST upsert ----
@@ -124,16 +108,13 @@ export const onRequestPost = async ({ request, env }) => {
         "Content-Type": "application/json",
         apikey: env.SUPABASE_SERVICE_ROLE_KEY,
         Authorization: `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}`,
-        // upsert + return row
         Prefer: "return=representation,resolution=merge-duplicates"
       },
-      // Upsert requires an array payload
-      body: JSON.stringify([row])
+      body: JSON.stringify([row]) // Upsert requires array payload
     });
 
     const out = await resp.json();
     if (!resp.ok) {
-      // Bubble up the exact Supabase error so you can see what’s wrong
       return json({ error: out?.message || "Insert failed", details: out }, 400);
     }
 
@@ -151,29 +132,11 @@ function json(obj, status = 200) {
   });
 }
 
-// ---- helpers ----
-
-function extractASIN(s) {
-  if (!s) return null;
-  try {
-    const u = new URL(s, "https://x.invalid");
-    const m =
-      u.pathname.match(/\/dp\/([A-Z0-9]{10})/i) ||
-      u.pathname.match(/\/gp\/product\/([A-Z0-9]{10})/i) ||
-      u.search.match(/[?&]asin=([A-Z0-9]{10})/i);
-    if (m?.[1]) return m[1].toUpperCase();
-  } catch {
-    /* fall through */
-  }
-  const m2 = String(s).toUpperCase().match(/\b([A-Z0-9]{10})\b/);
-  return m2 ? m2[1] : null;
-}
-
 function slugify(s = "") {
   return s
     .toLowerCase()
     .normalize("NFKD").replace(/[\u0300-\u036f]/g, "")
     .replace(/[^a-z0-9]+/g, "-")
-    .replace(/(^-|-$)/g, "")
+    .replace(/(^-|-$)+/g, "")
     .slice(0, 40);
 }
