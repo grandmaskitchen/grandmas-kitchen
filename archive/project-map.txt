@@ -1,0 +1,32 @@
+GMK - Project map (what goes where)
+/                           				# Static site root (anything here is served as-is)
+├── index.html
+├── about.html
+├── recipes.html
+├── shop.html
+├── products/               			# (optional) static product pages, images, etc.
+│   └── … 
+├── admin/                  			# STATIC admin UI pages (HTML/JS/CSS)
+│   ├── index.html          			# dashboard (=> https://site/admin/)
+│   ├── add-product.html    		# add form (=> https://site/admin/add-product.html)
+│   └── js/                 			# browser JS for admin pages
+│       ├── dashboard.js
+│       └── add-product.js
+├── assets/                 			# shared CSS/JS/images (name it assets/ or public/)
+│   ├── style.css
+│   └── scripts/
+│       └── form-submit.js
+├── images/
+│   └── …
+└── functions/              			# PAGES FUNCTIONS (server code ONLY)
+    └── api/
+        ├── diag.js                      		->  /api/diag
+        ├── shop-list.js                		->  /api/shop-list   (public data)
+        └── admin/                       		# ADMIN/NON-PUBLIC APIs
+            ├── amazon-fetch.js   		->  /api/admin/amazon-fetch
+            ├── product-upsert.js 		->  /api/admin/product-upsert
+            ├── products-list.js         		->  /api/admin/products-list
+            ├── product-get.js           		->  /api/admin/product-get
+            ├── product-approve.js      	->  /api/admin/product-approve
+            ├── product-delete.js        		->  /api/admin/product-delete
+            └── export-csv.js            		->  /api/admin/export-csv
