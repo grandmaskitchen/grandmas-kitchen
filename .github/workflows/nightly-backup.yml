@@ -1,0 +1,14 @@
+name: Nightly Backup
+on:
+  schedule:
+    - cron: "0 3 * * *"   # every day at 03:00 UTC
+  workflow_dispatch: {}   # let you run it manually too
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call backup endpoint
+        run: |
+          curl -sS -X POST \
+            -H "X-Backup-Token: ${{ secrets.BACKUP_TOKEN }}" \
+            "${{ secrets.BACKUP_URL }}"
