@@ -1,101 +1,81 @@
 // POST /api/admin/home-picks-refresh
-// Replace today's picks in shop_products with 6 random approved products.
-// Safe against NULLs and sparse datasets.
+// Clears shop_products, inserts 6 random from approved products.
+export const onRequestOptions = ({ request }) =>
+  new Response(null, {
+    status: 204,
+    headers: {
+      "Access-Control-Allow-Origin": request.headers.get("Origin") || "*",
+      "Access-Control-Allow-Methods": "POST, OPTIONS",
+      "Access-Control-Allow-Headers": "Content-Type",
+    },
+  });
 
 export const onRequestPost = async ({ env }) => {
   try {
-    // 1) fetch a pool of approved products (filter out rows that would violate NOT NULLs)
-    const poolUrl = new URL(`${env.SUPABASE_URL}/rest/v1/products`);
-    poolUrl.searchParams.set(
+    const base = env.SUPABASE_URL;
+    const key  = env.SUPABASE_SERVICE_ROLE_KEY;
+
+    // 1) Fetch up to 200 approved products that HAVE a product_num
+    const url = new URL(`${base}/rest/v1/products`);
+    url.searchParams.set(
       "select",
-      [
-        "product_num",
-        "my_title",
-        "amazon_title",
-        "my_description_short",
-        "image_main",
-        "approved",
-        "created_at",
-      ].join(",")
+      "product_num,approved,created_at"
     );
-    poolUrl.searchParams.set("approved", "eq.true");
-    // require product_num and image_main (avoid 23502: null value)
-    poolUrl.searchParams.set("product_num", "not.is.null");
-    poolUrl.searchParams.set("image_main", "not.is.null");
-    // pull a decent pool, we’ll randomize in JS
-    poolUrl.searchParams.set("limit", "100");
-
-    const poolRes = await fetch(poolUrl, {
-      headers: {
-        apikey: env.SUPABASE_SERVICE_ROLE_KEY,
-        Authorization: `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}`,
-        Prefer: "count=exact",
-      },
+    url.searchParams.set("approved", "eq.true");
+    url.searchParams.set("order", "created_at.desc");
+    url.searchParams.set("limit", "200");
+    // keep only rows with a non-null/non-empty product_num after fetch
+    const listRes = await fetch(url.toString(), {
+      headers: { apikey: key, Authorization: `Bearer ${key}` },
     });
-
-    if (!poolRes.ok) {
-      const t = await poolRes.text();
-      return json({ error: "Failed to fetch products", details: t }, 500);
+    if (!listRes.ok) {
+      const txt = await listRes.text();
+      return json({ error: "Fetch approved failed", details: txt }, 500);
     }
+    const rows = (await listRes.json()).filter(
+      r => r.product_num && String(r.product_num).trim() !== ""
+    );
+    if (!rows.length) return json({ ok: false, inserted: 0, note: "No eligible products" });
 
-    const pool = await poolRes.json();
+    // 2) Shuffle & take 6
+    const pickNums = [...rows]
+      .sort(() => Math.random() - 0.5)
+      .slice(0, 6)
+      .map(r => ({ product_num: r.product_num }));
 
-    if (!Array.isArray(pool) || pool.length === 0) {
-      return json({ error: "No eligible products found" }, 400);
-    }
-
-    // 2) randomize and take 6
-    shuffle(pool);
-    const picks = pool.slice(0, Math.min(6, pool.length));
-
-    // 3) wipe current shop_products (delete all rows)
-    const delUrl = new URL(`${env.SUPABASE_URL}/rest/v1/shop_products`);
-    // PostgREST requires a filter for DELETE; this matches all rows
-    delUrl.searchParams.set("product_num", "not.is.null");
-
-    const delRes = await fetch(delUrl, {
+    // 3) Clear shop_products
+    const delRes = await fetch(`${base}/rest/v1/shop_products`, {
       method: "DELETE",
       headers: {
-        apikey: env.SUPABASE_SERVICE_ROLE_KEY,
-        Authorization: `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}`,
+        apikey: key,
+        Authorization: `Bearer ${key}`,
         Prefer: "return=minimal",
       },
     });
     if (!delRes.ok) {
-      const t = await delRes.text();
-      return json({ error: "Failed to clear old picks", details: t }, 500);
+      const txt = await delRes.text();
+      return json({ error: "Failed to clear shop_products", details: txt }, 500);
     }
 
-    // 4) insert new picks (only columns the table has)
-    const rows = picks.map(p => ({
-      product_num: p.product_num,
-      my_title: p.my_title ?? null,
-      amazon_title: p.amazon_title ?? null,
-      my_description_short: p.my_description_short ?? null,
-      image_main: p.image_main ?? null,
-      // created_at will default to now() if you set a default in schema
-    }));
-
-    const insUrl = new URL(`${env.SUPABASE_URL}/rest/v1/shop_products`);
-    const insRes = await fetch(insUrl, {
+    // 4) Insert only { product_num }
+    const insRes = await fetch(`${base}/rest/v1/shop_products`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        apikey: env.SUPABASE_SERVICE_ROLE_KEY,
-        Authorization: `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}`,
+        apikey: key,
+        Authorization: `Bearer ${key}`,
         Prefer: "return=representation",
       },
-      body: JSON.stringify(rows),
+      body: JSON.stringify(pickNums),
     });
-
-    const out = await insRes.json().catch(() => null);
+    const out = await insRes.json();
     if (!insRes.ok) {
-      return json({ error: "Failed to insert picks", details: out }, 500);
+      return json({ error: out?.message || "Failed to insert picks", details: out }, 500);
     }
 
-    return json({ ok: true, inserted: Array.isArray(out) ? out.length : picks.length });
-  } catch (err) {
-    return json({ error: err?.message || "Server error" }, 500);
+    return json({ ok: true, inserted: Array.isArray(out) ? out.length : 0 });
+  } catch (e) {
+    return json({ error: e?.message || "Server error" }, 500);
   }
 };
 
@@ -104,12 +84,4 @@ function json(obj, status = 200) {
     status,
     headers: { "Content-Type": "application/json" },
   });
-}
-
-function shuffle(a) {
-  for (let i = a.length - 1; i > 0; i--) {
-    const j = (Math.random() * (i + 1)) | 0;
-    [a[i], a[j]] = [a[j], a[i]];
-  }
-  return a;
 }
