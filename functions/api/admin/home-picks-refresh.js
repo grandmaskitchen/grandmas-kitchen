@@ -1,5 +1,6 @@
 // POST /api/admin/home-picks-refresh
-// Clears shop_products, inserts 6 random approved products that HAVE product_num.
+// Clears shop_products and inserts 6 random *approved* products (by product_num).
+
 export const onRequestOptions = ({ request }) =>
   new Response(null, {
     status: 204,
@@ -14,53 +15,45 @@ export const onRequestPost = async ({ env }) => {
   try {
     const base = env.SUPABASE_URL;
     const key  = env.SUPABASE_SERVICE_ROLE_KEY;
+    if (!base || !key) return json({ error: "Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY" }, 500);
 
-    // 1) get up to 200 approved products (only fields we need)
-    const url = new URL(`${base}/rest/v1/products`);
-    url.searchParams.set("select", "product_num,approved,created_at");
-    url.searchParams.set("approved", "eq.true");
-    url.searchParams.set("order", "created_at.desc");
-    url.searchParams.set("limit", "200");
+    // 1) Fetch up to 200 approved products that HAVE a product_num
+    const approvedUrl =
+      `${base}/rest/v1/products?` +
+      [
+        "select=product_num",
+        "approved=eq.true",
+        "product_num=not.is.null",
+        "order=created_at.desc",
+        "limit=200",
+      ].join("&");
 
-    const listRes = await fetch(url.toString(), {
+    const r = await fetch(approvedUrl, {
       headers: { apikey: key, Authorization: `Bearer ${key}` },
     });
-    if (!listRes.ok) {
-      const txt = await listRes.text();
-      return json({ error: "Fetch approved failed", details: txt }, 500);
+    if (!r.ok) return json({ error: "Fetch approved failed", details: await r.text() }, 500);
+
+    const rows = (await r.json()) || [];
+    const pool = [...new Set(rows.map(x => String(x.product_num || "").trim()).filter(Boolean))];
+    if (!pool.length) {
+      // nothing to pick from
+      await clearShop(base, key);
+      return json({ ok: true, inserted: 0 });
     }
 
-    // 2) keep only rows with a non-empty product_num
-    const all = await listRes.json();
-    const eligible = (all || []).filter(
-      r => r?.product_num && String(r.product_num).trim() !== ""
-    );
-    if (!eligible.length) {
-      return json({ ok: false, inserted: 0, note: "No eligible products (missing product_num)" });
-    }
+    // 2) sample 6 unique product_num
+    const chosen = sample(pool, 6).map(num => ({
+      product_num: num,
+      // include created_at to avoid NOT NULL issues on some schemas
+      created_at: new Date().toISOString(),
+    }));
 
-    // 3) shuffle & pick 6 -> we only insert { product_num }
-    const picks = [...eligible]
-      .sort(() => Math.random() - 0.5)
-      .slice(0, 6)
-      .map(r => ({ product_num: r.product_num }));
+    // 3) wipe table and insert picks
+    await clearShop(base, key);
 
-    // 4) wipe shop_products
-    const delRes = await fetch(`${base}/rest/v1/shop_products`, {
-      method: "DELETE",
-      headers: {
-        apikey: key,
-        Authorization: `Bearer ${key}`,
-        Prefer: "return=minimal",
-      },
-    });
-    if (!delRes.ok) {
-      const txt = await delRes.text();
-      return json({ error: "Failed to clear shop_products", details: txt }, 500);
-    }
+    if (!chosen.length) return json({ ok: true, inserted: 0 });
 
-    // 5) insert only the guaranteed column
-    const insRes = await fetch(`${base}/rest/v1/shop_products`, {
+    const ins = await fetch(`${base}/rest/v1/shop_products`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -68,12 +61,13 @@ export const onRequestPost = async ({ env }) => {
         Authorization: `Bearer ${key}`,
         Prefer: "return=representation",
       },
-      body: JSON.stringify(picks),
+      body: JSON.stringify(chosen),
     });
-    const out = await insRes.json();
-    if (!insRes.ok) {
-      return json({ error: out?.message || "Failed to insert picks", details: out }, 500);
-    }
+
+    let out = null;
+    try { out = await ins.json(); } catch { /* ignore non-JSON */ }
+
+    if (!ins.ok) return json({ error: "Failed to insert picks", details: out }, 500);
 
     return json({ ok: true, inserted: Array.isArray(out) ? out.length : 0 });
   } catch (e) {
@@ -82,8 +76,26 @@ export const onRequestPost = async ({ env }) => {
 };
 
 function json(obj, status = 200) {
-  return new Response(JSON.stringify(obj), {
-    status,
-    headers: { "Content-Type": "application/json" },
+  return new Response(JSON.stringify(obj), { status, headers: { "Content-Type": "application/json" } });
+}
+
+async function clearShop(base, key) {
+  await fetch(`${base}/rest/v1/shop_products`, {
+    method: "DELETE",
+    headers: {
+      apikey: key,
+      Authorization: `Bearer ${key}`,
+      Prefer: "return=minimal",
+    },
   });
+}
+
+// Fisher–Yates unique sample
+function sample(arr, n) {
+  const a = arr.slice();
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a.slice(0, n);
 }
