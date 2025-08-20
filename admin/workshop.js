@@ -54,7 +54,18 @@ document.querySelectorAll('.btnBackup').forEach(btn => {
     URL.revokeObjectURL(a.href);
   });
 });
-
+<script>
+(async function () {
+  try {
+    const r = await fetch('/api/admin/whoami', { credentials: 'include' });
+    const { user } = await r.json();
+    const el = document.getElementById('whoami');
+    if (el && user) el.textContent = `You are logged in as ${user}`;
+  } catch (e) {
+    // ignore
+  }
+})();
+</script>
 // --- Home picks refresh ---
 $('#btnRefreshPicks')?.addEventListener('click', async () => {
   const { ok, status, json } = await fetchJSON('/api/admin/home-picks-refresh', { method: 'POST' });
