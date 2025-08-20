@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Workshop • Admin</title>
+  <meta name="robots" content="noindex,nofollow"/>
+  <style>
+    body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;background:#fffdf8;color:#222;margin:0}
+    header,main{max-width:960px;margin:0 auto;padding:16px}
+    h1{margin:8px 0 4px}
+    .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px;margin-top:12px}
+    .card{background:#fff;padding:14px;border-radius:10px;box-shadow:0 2px 8px rgba(0,0,0,.06)}
+    .card h2{font-size:1.05rem;margin:0 0 .5rem}
+    button, a.btn{background:#44633F;color:#fff;border:0;border-radius:8px;padding:.6rem .9rem;cursor:pointer;text-decoration:none;display:inline-block}
+    button.secondary{background:#ddd;color:#222}
+    .muted{color:#666}
+    pre{background:#111;color:#0f0;padding:10px;border-radius:8px;overflow:auto;max-height:280px}
+    .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+    small{color:#666}
+  </style>
+</head>
+<body>
+  <header>
+    <h1>🔧 Workshop</h1>
+    <p class="muted">Daily ops: diagnostics, backups, home picks.</p>
+  </header>
+
+  <main class="grid">
+
+    <section class="card">
+      <h2>Diagnostics</h2>
+      <div class="row">
+        <button id="btnDiagProducts">Run diag (products)</button>
+        <button id="btnDiagShop">Run diag (shop_products)</button>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <button id="btnStats">Quick stats</button>
+      </div>
+      <div id="diagOut" style="margin-top:10px"></div>
+    </section>
+
+    <section class="card">
+      <h2>Backups (download JSON)</h2>
+      <div class="row">
+        <button data-table="products" class="btnBackup">Download products</button>
+        <button data-table="shop_products" class="btnBackup">Download shop_products</button>
+      </div>
+      <small>Files download to your computer as <code>products-YYYYMMDD.json</code> etc.</small>
+    </section>
+
+    <section class="card">
+      <h2>Home Picks</h2>
+      <p class="muted">Pick 6 random <em>approved</em> products into <code>shop_products</code> (today’s picks).</p>
+      <div class="row">
+        <button id="btnRefreshPicks">Refresh 6 random</button>
+        <a class="btn secondary" href="/shop.html" target="_blank" rel="noopener">View shop</a>
+      </div>
+      <div id="picksOut" style="margin-top:10px"></div>
+    </section>
+
+    <section class="card">
+      <h2>Shortcuts</h2>
+      <div class="row">
+        <a class="btn secondary" href="/admin/add-product.html" target="_blank">Add product</a>
+        <a class="btn secondary" href="/api/diag" target="_blank">/api/diag</a>
+        <a class="btn secondary" href="/api/shop-list" target="_blank">/api/shop-list</a>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Debug</h2>
+      <pre id="debugBox">(nothing yet)</pre>
+    </section>
+
+  </main>
+
+  <script src="/admin/workshop.js" defer></script>
+</body>
+</html>
