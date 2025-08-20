@@ -5,62 +5,107 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Grandma’s Kitchen</title>
 
+  <!-- Site styles -->
+  <link rel="stylesheet" href="/style.css" />
+
+  <!-- RSS for daily picks (optional but nice) -->
   <link rel="alternate" type="application/rss+xml"
         title="Grandma’s Kitchen • Daily Picks"
         href="/app/home-picks.rss" />
 
-  <link rel="preload" href="/style.css" as="style">
-  <link rel="stylesheet" href="/style.css">
+  <!-- Tiny skeleton shimmer while picks load -->
+  <style>
+    .skeleton{background:linear-gradient(90deg,#eee 25%,#f5f5f5 37%,#eee 63%);background-size:400% 100%;animation:shimmer 1.2s infinite}
+    @keyframes shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
+    .skeleton.img{width:100%;aspect-ratio:1/1;border-radius:12px;margin:0 0 10px}
+    .skeleton.text{height:16px;border-radius:8px;margin:6px 0}
+    .product-image img{width:100%;height:auto;border-radius:12px;display:block}
+  </style>
 </head>
 <body>
-  ...
-  <section class="container" aria-labelledby="daily-picks-title">
-    <h2 id="daily-picks-title">Today’s Picks</h2>
-    <div id="homePicks" class="grid grid-2">
-      <article class="card"><div class="skeleton img"></div><div class="skeleton text" style="width:70%"></div></article>
-      <article class="card"><div class="skeleton img"></div><div class="skeleton text" style="width:60%"></div></article>
-    </div>
-  </section>
 
+  <!-- Header / Nav -->
+  <header class="container center">
+    <a href="/">
+      <img src="/images/logo.jpg" alt="Grandma’s Kitchen Logo" style="max-height:100px;margin-bottom:1rem;">
+    </a>
+    <nav aria-label="Primary">
+      <a href="/index.html" aria-current="page">Home</a>
+      <a href="/about.html">About</a>
+      <a href="/recipes.html">Recipes</a>
+      <a href="/shop.html">Shop</a>
+    </nav>
+    <p class="lead">Simple food. Lifelong health. Inspired by a 104-year legacy.</p>
+  </header>
+
+  <main>
+    <!-- Hero blurb (optional) -->
+    <div class="container container--narrow">
+      <h1>Grandma’s Kitchen</h1>
+      <p>Staples we actually use at home—simple, honest ingredients.</p>
+    </div>
+
+    <!-- Today’s Picks -->
+    <section class="container" aria-labelledby="daily-picks-title" id="home-picks-section">
+      <h2 id="daily-picks-title">Today’s Picks</h2>
+      <div id="homePicks" class="grid grid-2">
+        <!-- skeleton placeholders shown first -->
+        <article class="card"><div class="skeleton img"></div><div class="skeleton text" style="width:70%"></div></article>
+        <article class="card"><div class="skeleton img"></div><div class="skeleton text" style="width:60%"></div></article>
+      </div>
+    </section>
+
+    <section class="container container--narrow">
+      <p class="affiliate-note">As an Amazon Associate, we (Grandma's Kitchen) earn from qualifying purchases.</p>
+    </section>
+  </main>
+
+  <footer class="container container--narrow">
+    <p>© 2025 Grandma’s Kitchen • All rights reserved</p>
+  </footer>
+
+  <!-- Today’s Picks widget -->
   <script>
   (async function () {
+    const section = document.getElementById('home-picks-section');
     const box = document.getElementById('homePicks');
-    if (!box) return;
+    if (!section || !box) return;
 
     const esc = s => (s||'').replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m]));
 
     try {
-      const r = await fetch('/api/home-picks');    // ← FIXED
-      const { items, error } = await r.json();
-      if (!r.ok || !Array.isArray(items)) throw new Error(error || 'Failed to load');
-
-      if (!items.length) {
-        box.innerHTML = `<p class="muted">No picks yet.</p>`;
+      // Pull the latest 6 picks (joined with product details) from your function
+      const r = await fetch('/api/home-picks');
+      const { items } = await r.json();
+      if (!r.ok || !Array.isArray(items) || !items.length) {
+        // Hide section if nothing to show
+        section.style.display = 'none';
         return;
       }
 
       box.innerHTML = items.map(p => {
         const title = p.my_title || p.amazon_title || 'Product';
         const slug  = p.product_num || '';
-        const url   = `/products/${encodeURIComponent(slug)}`;
         const img   = p.image_main || '';
-        const blurb = p.my_description_short || '';
+        const cat   = p.amazon_category || '';
+
         return `
           <article class="card" aria-labelledby="pick-${esc(slug)}">
-            <a class="product-image" href="${esc(url)}">
+            <a class="product-image" href="/products/${encodeURIComponent(slug)}">
               ${img ? `<img loading="lazy" decoding="async" src="${esc(img)}" alt="${esc(title)}">` : ''}
             </a>
             <h3 id="pick-${esc(slug)}" class="product-title">
-              <a href="${esc(url)}">${esc(title)}</a>
+              <a href="/products/${encodeURIComponent(slug)}">${esc(title)}</a>
             </h3>
-            ${blurb ? `<p class="muted">${esc(blurb)}</p>` : ''}
-            <p><a class="btn" href="${esc(url)}">View product</a></p>
+            ${cat ? `<p class="muted" style="margin:.25rem 0 .5rem">${esc(cat)}</p>` : ''}
+            <p><a class="btn" href="/products/${encodeURIComponent(slug)}">View product</a></p>
           </article>
         `;
       }).join('');
-    } catch (err) {
-      console.error(err);
-      box.innerHTML = `<p class="muted">Sorry, today’s picks are unavailable.</p>`;
+    } catch (e) {
+      // On error, hide the section so the page still looks clean
+      console.error(e);
+      section.style.display = 'none';
     }
   })();
   </script>
