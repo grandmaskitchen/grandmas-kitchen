@@ -1,49 +1,57 @@
-// Global middleware for Cloudflare Pages Functions
-// Protects /admin/* pages and /api/admin/* endpoints with HTTP Basic Auth.
+// /functions/_middleware.js
+// Basic Auth for /admin/* and /api/admin/*
 //
 // Set env vars in Cloudflare Pages → Settings → Environment variables:
-//   WORKSHOP_USER = your username (e.g. "gary")
-//   WORKSHOP_PASS = your strong password (avoid leading/trailing spaces)
-// Optional:
-//   WORKSHOP_REALM = 'Workshop Admin' (text shown in the login prompt)
+//   WORKSHOP_USER  (secret)
+//   WORKSHOP_PASS  (secret)
+//   WORKSHOP_REALM (optional text shown in the login prompt; default "Workshop Admin")
 
-export async function onRequest({ request, env, next }) {
-  const url = new URL(request.url);
-  const p = url.pathname;
+export async function onRequest(context) {
+  const { request, env, next } = context;
+  const { pathname } = new URL(request.url);
 
-  // Only protect these areas
-  const protect = p.startsWith('/admin/') || p.startsWith('/api/admin/');
-
-  if (!protect) {
-    return next();
-  }
+  // Only guard admin areas
+  const protectedArea =
+    pathname.startsWith('/admin/') || pathname.startsWith('/api/admin/');
+  if (!protectedArea) return next();
 
   const realm = env.WORKSHOP_REALM || 'Workshop Admin';
-  const challenge = () =>
+  const user  = env.WORKSHOP_USER || '';
+  const pass  = env.WORKSHOP_PASS || '';
+
+  if (!user || !pass) {
+    return new Response('Admin auth not configured', {
+      status: 500,
+      headers: { 'Cache-Control': 'no-store' },
+    });
+  }
+
+  const unauthorized = () =>
     new Response('Unauthorized', {
       status: 401,
-      headers: { 'WWW-Authenticate': `Basic realm="${realm}"` }
+      headers: {
+        'WWW-Authenticate': `Basic realm="${realm}", charset="UTF-8"`,
+        'Cache-Control': 'no-store',
+      },
     });
 
-  const header = request.headers.get('Authorization') || '';
-  if (!header.startsWith('Basic ')) {
-    return challenge();
-  }
+  const auth = request.headers.get('Authorization') || '';
+  if (!auth.startsWith('Basic ')) return unauthorized();
 
+  let decoded = '';
   try {
-    // Decode "user:pass" (allow ':' inside the password)
-    const decoded = atob(header.slice(6));
-    const idx = decoded.indexOf(':');
-    const user = idx >= 0 ? decoded.slice(0, idx) : decoded;
-    const pass = idx >= 0 ? decoded.slice(idx + 1) : '';
-
-    // Compare to env
-    if (user === env.WORKSHOP_USER && pass === env.WORKSHOP_PASS) {
-      return next();
-    }
+    decoded = atob(auth.slice(6)); // "user:pass"
   } catch {
-    // fall through
+    return unauthorized();
   }
 
-  return challenge();
+  // Allow colon in password (split only at the first :)
+  const sep = decoded.indexOf(':');
+  const inUser = sep === -1 ? decoded : decoded.slice(0, sep);
+  const inPass = sep === -1 ? ''      : decoded.slice(sep + 1);
+
+  if (inUser !== user || inPass !== pass) return unauthorized();
+
+  // Auth OK
+  return next();
 }
