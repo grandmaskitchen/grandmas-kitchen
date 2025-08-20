@@ -30,6 +30,16 @@ async function fetchJSON(url, opts) {
   } catch (_) {}
 })();
 
+$('#btnRefreshPicks')?.addEventListener('click', async () => {
+  const r = await fetch('/api/admin/home-picks-refresh', { method: 'POST' });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) {
+    alert(`❌ Refresh failed (${r.status})\n${j.error || ''}`);
+  } else {
+    alert(`✅ Inserted: ${j.inserted ?? 0}`);
+  }
+});
+
 // ---------- diagnostics ----------
 $('#btnDiagProducts')?.addEventListener('click', async () => {
   const { ok, status, json } = await fetchJSON('/api/diag?table=products');
