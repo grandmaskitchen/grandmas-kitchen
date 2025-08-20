@@ -1,5 +1,5 @@
 // POST /api/admin/home-picks-refresh
-// Clears shop_products, inserts 6 random from approved products.
+// Clears shop_products, inserts 6 random approved products that HAVE product_num.
 export const onRequestOptions = ({ request }) =>
   new Response(null, {
     status: 204,
@@ -15,16 +15,13 @@ export const onRequestPost = async ({ env }) => {
     const base = env.SUPABASE_URL;
     const key  = env.SUPABASE_SERVICE_ROLE_KEY;
 
-    // 1) Fetch up to 200 approved products that HAVE a product_num
+    // 1) get up to 200 approved products (only fields we need)
     const url = new URL(`${base}/rest/v1/products`);
-    url.searchParams.set(
-      "select",
-      "product_num,approved,created_at"
-    );
+    url.searchParams.set("select", "product_num,approved,created_at");
     url.searchParams.set("approved", "eq.true");
     url.searchParams.set("order", "created_at.desc");
     url.searchParams.set("limit", "200");
-    // keep only rows with a non-null/non-empty product_num after fetch
+
     const listRes = await fetch(url.toString(), {
       headers: { apikey: key, Authorization: `Bearer ${key}` },
     });
@@ -32,18 +29,23 @@ export const onRequestPost = async ({ env }) => {
       const txt = await listRes.text();
       return json({ error: "Fetch approved failed", details: txt }, 500);
     }
-    const rows = (await listRes.json()).filter(
-      r => r.product_num && String(r.product_num).trim() !== ""
-    );
-    if (!rows.length) return json({ ok: false, inserted: 0, note: "No eligible products" });
 
-    // 2) Shuffle & take 6
-    const pickNums = [...rows]
+    // 2) keep only rows with a non-empty product_num
+    const all = await listRes.json();
+    const eligible = (all || []).filter(
+      r => r?.product_num && String(r.product_num).trim() !== ""
+    );
+    if (!eligible.length) {
+      return json({ ok: false, inserted: 0, note: "No eligible products (missing product_num)" });
+    }
+
+    // 3) shuffle & pick 6 -> we only insert { product_num }
+    const picks = [...eligible]
       .sort(() => Math.random() - 0.5)
       .slice(0, 6)
       .map(r => ({ product_num: r.product_num }));
 
-    // 3) Clear shop_products
+    // 4) wipe shop_products
     const delRes = await fetch(`${base}/rest/v1/shop_products`, {
       method: "DELETE",
       headers: {
@@ -57,7 +59,7 @@ export const onRequestPost = async ({ env }) => {
       return json({ error: "Failed to clear shop_products", details: txt }, 500);
     }
 
-    // 4) Insert only { product_num }
+    // 5) insert only the guaranteed column
     const insRes = await fetch(`${base}/rest/v1/shop_products`, {
       method: "POST",
       headers: {
@@ -66,7 +68,7 @@ export const onRequestPost = async ({ env }) => {
         Authorization: `Bearer ${key}`,
         Prefer: "return=representation",
       },
-      body: JSON.stringify(pickNums),
+      body: JSON.stringify(picks),
     });
     const out = await insRes.json();
     if (!insRes.ok) {
