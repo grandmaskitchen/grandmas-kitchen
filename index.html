@@ -36,3 +36,38 @@
     <article class="card"><div class="skeleton img"></div><div class="skeleton text" style="width:60%"></div></article>
   </div>
 </section>
+<script>
+(async function () {
+  const box = document.getElementById('homePicks');
+  if (!box) return;
+
+  const esc = s => (s||'').replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m]));
+
+  try {
+    const r = await fetch('/app/home-picks.json');
+    const { items, error } = await r.json();
+    if (!r.ok || !Array.isArray(items)) throw new Error(error || 'Failed to load');
+
+    if (!items.length) {
+      box.innerHTML = `<p class="muted">No picks yet.</p>`;
+      return;
+    }
+
+    box.innerHTML = items.map(p => `
+      <article class="card" aria-labelledby="pick-${esc(p.product_num)}">
+        <a class="product-image" href="${esc(p.url)}">
+          ${p.image ? `<img loading="lazy" decoding="async" src="${esc(p.image)}" alt="${esc(p.title)}">` : ''}
+        </a>
+        <h3 id="pick-${esc(p.product_num)}" class="product-title">
+          <a href="${esc(p.url)}">${esc(p.title)}</a>
+        </h3>
+        ${p.blurb ? `<p class="muted">${esc(p.blurb)}</p>` : ''}
+        <p><a class="btn" href="${esc(p.url)}">View product</a></p>
+      </article>
+    `).join('');
+  } catch (err) {
+    console.error(err);
+    box.innerHTML = `<p class="muted">Sorry, today’s picks are unavailable.</p>`;
+  }
+})();
+</script>
