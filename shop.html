@@ -18,7 +18,7 @@
 
 <header class="container center">
   <a href="/index.html">
-    <img src="/images/logo.jpg" alt="Grandma’s Kitchen Logo" style="max-height:100px;margin-bottom:1rem;">
+    <img class="site-logo" src="/images/logo.jpg" alt="Grandma’s Kitchen Logo">
   </a>
   <nav aria-label="Primary">
     <a href="/index.html">Home</a>
@@ -37,16 +37,9 @@
 
   <div class="container">
     <div id="grid" class="grid grid-2">
-      <article class="card">
-        <div class="skeleton img"></div>
-        <div class="skeleton text" style="width:60%"></div>
-        <div class="skeleton text" style="width:90%"></div>
-      </article>
-      <article class="card">
-        <div class="skeleton img"></div>
-        <div class="skeleton text" style="width:70%"></div>
-        <div class="skeleton text" style="width:85%"></div>
-      </article>
+      <!-- skeletons -->
+      <article class="card"><div class="skeleton img"></div><div class="skeleton text" style="width:60%"></div><div class="skeleton text" style="width:90%"></div></article>
+      <article class="card"><div class="skeleton img"></div><div class="skeleton text" style="width:70%"></div><div class="skeleton text" style="width:85%"></div></article>
     </div>
   </div>
 </main>
@@ -61,18 +54,17 @@
   const grid = document.getElementById('grid');
   const catNote = document.getElementById('catNote');
   const esc = s => (s||'').replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m]));
+  const qs = new URLSearchParams(location.search);
+  const cat = (qs.get('cat') || '').trim();    // <-- single param: ?cat=
 
-  const params = new URLSearchParams(location.search);
-  const category = params.get('category')?.trim() || '';
-
-  if (category) {
-    catNote.innerHTML = `Filtering by category: <a class="chip" href="/shop.html?category=${encodeURIComponent(category)}">${esc(category)}</a> &nbsp; <a href="/shop.html" class="muted">(clear)</a>`;
+  if (cat) {
+    catNote.innerHTML = `Filtering by category: <a class="chip" href="/shop.html?cat=${encodeURIComponent(cat)}">${esc(cat)}</a> &nbsp; <a href="/shop.html" class="muted">(clear)</a>`;
   }
 
   try {
     const url = new URL('/api/shop-list', location.origin);
     url.searchParams.set('limit', '100');
-    if (category) url.searchParams.set('category', category);
+    if (cat) url.searchParams.set('cat', cat);
 
     const r = await fetch(url.toString(), { cache: 'no-store' });
     const { items, error } = await r.json();
@@ -87,7 +79,7 @@
       const title = p.my_title || p.amazon_title || 'Product';
       const img = p.image_main || '';
       const slug = p.product_num || '';
-      const cat = p.amazon_category || '';
+      const c = p.amazon_category || '';
 
       return `
         <article class="card" aria-labelledby="prod-${esc(slug)}-title">
@@ -97,8 +89,8 @@
           <h3 id="prod-${esc(slug)}-title" class="product-title line-2">
             <a href="/products/${encodeURIComponent(slug)}">${esc(title)}</a>
           </h3>
-          ${cat ? `<p class="muted" style="margin:.25rem 0 .5rem">
-              <a class="chip" href="/shop.html?category=${encodeURIComponent(cat)}">${esc(cat)}</a>
+          ${c ? `<p class="muted" style="margin:.25rem 0 .5rem">
+              <a class="chip" href="/shop.html?cat=${encodeURIComponent(c)}">${esc(c)}</a>
             </p>` : ''}
           <p><a class="btn" href="/products/${encodeURIComponent(slug)}">View product</a></p>
         </article>
