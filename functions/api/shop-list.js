@@ -1,16 +1,21 @@
 // GET /api/shop-list
 // Public Pantry list: approved products only, newest first.
-// Supports search (?q=) and category filter (?cat=).
+// Optional filter: ?category=<slug>
 // Dedupe by product_num (case-insensitive), newest wins.
 
 export const onRequestGet = async ({ request, env }) => {
   try {
-    const url   = new URL(request.url);
-    const q     = (url.searchParams.get("q")   || "").trim();
-    const cat   = (url.searchParams.get("cat") || "").trim();
+    const url = new URL(request.url);
     const limit = Number(url.searchParams.get("limit") || 100);
+    const catSlug = (url.searchParams.get("category") || "").trim();
 
-    const sb = new URL(`${env.SUPABASE_URL}/rest/v1/products`);
+    const base = env.SUPABASE_URL, key = env.SUPABASE_SERVICE_ROLE_KEY;
+    if (!base || !key) return json({ error: "Missing Supabase env" }, 500);
+
+    const sb = new URL(`${base}/rest/v1/products`);
+    // When filtering by category slug, use INNER join so only matching rows return
+    const catSelect = catSlug ? "category:categories!inner(name,slug)" : "category:categories(name,slug)";
+
     sb.searchParams.set(
       "select",
       [
@@ -20,30 +25,25 @@ export const onRequestGet = async ({ request, env }) => {
         "my_description_short",
         "image_main",
         "affiliate_link",
-        "amazon_category",
         "approved",
         "created_at",
+        catSelect
       ].join(",")
     );
+
     sb.searchParams.set("approved", "eq.true");
     sb.searchParams.set("order", "created_at.desc");
     if (limit > 0) sb.searchParams.set("limit", String(limit));
 
-    // Text search across title + category
-    if (q) {
-      const term = `*${q}*`;
-      sb.searchParams.set("or", `(my_title.ilike.${term},amazon_title.ilike.${term},amazon_category.ilike.${term})`);
-    }
-
-    // Category filter (case-insensitive contains)
-    if (cat) {
-      sb.searchParams.set("amazon_category", `ilike.*${cat}*`);
+    if (catSlug) {
+      // filter through the embedded relation
+      sb.searchParams.set("categories.slug", `eq.${catSlug}`);
     }
 
     const r = await fetch(sb.toString(), {
       headers: {
-        apikey: env.SUPABASE_SERVICE_ROLE_KEY,
-        Authorization: `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}`,
+        apikey: key,
+        Authorization: `Bearer ${key}`,
         Prefer: "count=exact",
       },
     });
@@ -59,10 +59,10 @@ export const onRequestGet = async ({ request, env }) => {
     const seen = new Set();
     const unique = [];
     for (const row of rows || []) {
-      const key = (row.product_num || "").toLowerCase();
-      if (!key) continue;
-      if (seen.has(key)) continue;
-      seen.add(key);
+      const keyNum = (row.product_num || "").toLowerCase();
+      if (!keyNum) continue;
+      if (seen.has(keyNum)) continue;
+      seen.add(keyNum);
       unique.push(row);
     }
 
