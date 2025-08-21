@@ -11,13 +11,12 @@
     h1{font-size:1.6rem;margin:0 0 1rem}
     form{display:grid;gap:12px;background:#fff;padding:16px;border-radius:10px;box-shadow:0 2px 8px rgba(0,0,0,.06)}
     label{font-weight:600}
-    input,textarea,select{width:100%;box-sizing:border-box;padding:.6rem;border:1px solid #cfcfcf;border-radius:8px;font-size:1rem;background:#fff}
+    input,textarea,select{width:100%;box-sizing:border-box;padding:.6rem;border:1px solid #cfcfcf;border-radius:8px;font-size:1rem}
     .row{display:grid;grid-template-columns:1fr auto;gap:12px}
     .actions{display:flex;gap:12px;align-items:center;margin-top:.5rem}
     .hint{font-size:.85rem;color:#666}
     button{background:#44633F;color:#fff;border:0;border-radius:8px;padding:.7rem 1rem;cursor:pointer}
     button.secondary{background:#ddd;color:#222}
-    a.btnlike{display:inline-block;background:#ddd;color:#222;text-decoration:none;border-radius:8px;padding:.7rem 1rem}
     #fetchStatus{font-size:.9rem;color:#666}
     #preview{display:none;background:#fff7ea;border:1px solid #eee;border-radius:10px;padding:12px}
   </style>
@@ -45,14 +44,14 @@
       <label for="my_description_short">Short Description</label>
       <textarea id="my_description_short" name="my_description_short" rows="2"></textarea>
 
-      <!-- NEW: Category (required) -->
+      <!-- REQUIRED: our curated category -->
       <label for="shopCategory">Category *</label>
       <select id="shopCategory" name="shop_category_id" required>
         <option value="">— Choose a category —</option>
       </select>
-      <small class="hint">Pick the best fit. You can add more categories later.</small>
+      <small class="hint">Don’t see one? We can add a “Manage categories” screen later.</small>
 
-      <label style="display:flex;gap:.5rem;align-items:center;margin-top:.25rem;">
+      <label style="display:flex;gap:.5rem;align-items:center;">
         <input type="checkbox" id="approved" name="approved" value="true" />
         Approved
       </label>
@@ -68,7 +67,7 @@
 
       <div class="actions">
         <button type="submit">Submit</button>
-        <a class="btnlike" href="/shop.html">Back to Pantry</a>
+        <a class="secondary" href="/shop.html"><button type="button" class="secondary">Back to Pantry</button></a>
       </div>
     </form>
 
@@ -82,7 +81,6 @@
       const statusEl = document.getElementById('fetchStatus');
       const byName = (n) => document.querySelector(`[name="${n}"]`);
 
-      // fields we clear before each fetch so old data doesn't linger
       const FIELDS_TO_CLEAR = [
         'amazon_title','amazon_desc','image_main','image_small',
         'image_extra_1','image_extra_2','amazon_category',
@@ -127,7 +125,6 @@
             body: JSON.stringify({ input })
           });
 
-          // Accept text then try JSON to avoid “Unexpected end of JSON input”
           const text = await r.text();
           let json;
           try { json = JSON.parse(text); } catch { throw new Error(text?.slice(0,160) || 'Non-JSON response'); }
@@ -155,12 +152,13 @@
           if (short && !short.value && s.amazon_desc) short.value = s.amazon_desc.slice(0, 240);
 
           // Normalize link & derive product_num (ASIN)
-          if (s.affiliate_link) byName('affiliate_link').value = s.affiliate_link;
-
+          if (s.affiliate_link) {
+            byName('affiliate_link').value = s.affiliate_link;
+          }
           const asin = extractASIN(byName('affiliate_link').value) || extractASIN(input);
           if (asin) byName('product_num').value = asin.toLowerCase();
 
-          statusEl.textContent = 'Filled from Amazon. Review fields, choose a category, then Submit.';
+          statusEl.textContent = 'Filled from Amazon. Review fields, then Submit.';
         } catch (err) {
           alert('Fetch failed: ' + err.message);
           statusEl.textContent = 'Fetch failed.';
@@ -168,25 +166,30 @@
           btn.disabled = false;
         }
       }
-      btn?.addEventListener('click', doFetch);
 
-      // Load categories for the <select>
-      (async function loadCategories(){
-        const sel = document.getElementById('shopCategory');
-        try {
-          const r = await fetch('/api/admin/categories', { credentials: 'include' });
-          const { items } = await r.json();
-          (items || []).forEach(c => {
+      btn?.addEventListener('click', doFetch);
+    })();
+  </script>
+
+  <!-- Load categories for the select -->
+  <script>
+    (async function loadCategories(){
+      const sel = document.getElementById('shopCategory');
+      if (!sel) return;
+      try {
+        const r = await fetch('/api/admin/categories-list');
+        const { items } = await r.json();
+        if (Array.isArray(items)) {
+          for (const c of items) {
             const opt = document.createElement('option');
             opt.value = c.id;
             opt.textContent = c.name;
             sel.appendChild(opt);
-          });
-        } catch (e) {
-          console.error('Load categories failed', e);
-          // keep the select with just the placeholder; submission will fail if left empty
+          }
         }
-      })();
+      } catch (e) {
+        console.error('Failed to load categories', e);
+      }
     })();
   </script>
 
