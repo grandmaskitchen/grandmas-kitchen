@@ -54,3 +54,4 @@ function json(obj, status = 200, extra = {}) {
     headers: { 'Content-Type': 'application/json', ...extra },
   });
 }
+
