@@ -1,253 +1,193 @@
-/* ---- Brand base ---- */
+/* ============================================================
+   Grandma’s Kitchen — Site Styles (clean consolidated)
+   ============================================================ */
+
+/* ---- Theme tokens ---- */
 :root{
-  --bg:#fbf7ef; --card:#fff7ea; --ink:#2f332f;
-  --olive:#3f5f3b; --olive-600:#345232; --accent:#e77a57;
+  --bg:#fbf7ef;
+  --card:#fff7ea;
+  --ink:#2f332f;
+  --olive:#3f5f3b;
+  --olive-600:#345232;
+  --accent:#e77a57;
   --radius:16px;
+
+  /* UI tuning */
+  --logo-max: 130px;          /* header logo max-height */
+  --nav-size: 1.05rem;        /* nav link size */
+  --card-title-size: 1.05rem; /* product card title size */
+  --card-title-weight: 600;   /* card title weight */
+  --card-title-line: 1.35;    /* card title line-height */
 }
 
-/* Basics */
+/* ---- Base / reset ---- */
 *{ box-sizing:border-box; }
 html,body{
-  margin:0; padding:0; background:var(--bg); color:var(--ink);
+  margin:0; padding:0;
+  background:var(--bg);
+  color:var(--ink);
   font:16px/1.6 system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,"Helvetica Neue",Arial;
 }
 img{ max-width:100%; height:auto; border-radius:12px; }
 
-/* ---- Alignment ---- */
+/* Alignment */
 body{ text-align:left; }
 header, footer{ text-align:center; }
 
-/* ---- Layout ---- */
+/* ---- Layout helpers ---- */
 .container{ width:min(100% - 2rem, 1100px); margin-inline:auto; padding:24px; }
 .container--narrow{ width:min(100% - 2rem, 68ch); }
 
-/* Intro line on Shop page */
+/* Intro line on shop page */
 .container--narrow .lead{
   text-align:center;
   margin:.5rem auto 2rem;
   max-width:68ch;
 }
 
-/* Readable paragraphs */
+/* Readable paragraphs globally */
 main p{ max-width:68ch; margin:1rem auto; text-align:left; }
 
-/* ---- Headings ---- */
-h1{ font-size:clamp(2.2rem,4vw,3.5rem); color:var(--olive); margin:24px 0 8px; }
-h2{ font-size:clamp(1.6rem,3vw,2.4rem); color:var(--olive); margin:24px 0 12px; }
-h3{ font-size:clamp(1.2rem,2.4vw,1.6rem); color:#3a3a3a; letter-spacing:.02em; }
+/* ---- Headings (global) ---- */
+h1{ font-size:clamp(2.2rem, 4vw, 3.5rem); color:var(--olive); margin:24px 0 8px; }
+h2{ font-size:clamp(1.6rem, 3vw, 2.4rem); color:var(--olive); margin:24px 0 12px; }
+h3{ font-size:clamp(1.2rem, 2.4vw, 1.6rem); color:#3a3a3a; letter-spacing:.02em; }
 
-/* Center page titles within text width */
+/* Center main page headings to text width */
 main h1{ max-width:68ch; margin:2rem auto 0; text-align:center; }
 main h2{ max-width:68ch; margin:2rem auto 1rem; text-align:center; }
 
-/* Detail page title (med) */
-.product-title--detail{
-  font-weight:600;
-  font-size:clamp(2.0rem,3vw,3.0rem);
-  line-height:1.15;
-  color:var(--olive);
-  text-align:center;
-  margin:0 0 .75rem;
-}
-
-/* ---- Nav ---- */
+/* ---- Header / Nav ---- */
 header{ padding:18px 0; }
+.site-logo{                 /* add class="site-logo" to the header <img> */
+  max-height: var(--logo-max);
+  height:auto; width:auto;
+  display:block; margin:0 auto 1rem;
+}
 nav{ display:flex; gap:.5rem 1rem; justify-content:center; flex-wrap:wrap; }
-nav a{ color:var(--olive); text-decoration:none; }
+nav a{
+  color:var(--olive);
+  text-decoration:none;
+  font-size: var(--nav-size);
+  padding:0 .75rem;
+  line-height:1.6;
+}
 nav a:hover{ text-decoration:underline; }
 nav a + a::before{ content:"|"; opacity:.5; margin-inline:.5rem; }
 
-/* ==== Buttons (revamped) ====================================== */
-
-/* Base button */
+/* ---- Buttons ---- */
 .btn{
-  display:inline-flex;                /* centers text/icons nicely */
-  align-items:center;
-  justify-content:center;
-  gap:.5rem;
-  padding:14px 18px;                  /* mobile-friendly tap target */
-  min-height:44px;                    /* WCAG touch size */
-  font-weight:700;
-  font-size:1rem;
+  display:inline-flex; align-items:center; justify-content:center; gap:.5rem;
+  padding:14px 18px; min-height:44px;
+  font-weight:600; font-size:1rem;
   border-radius:14px;
-  background:var(--olive);
-  color:#fff;
-  text-decoration:none;
+  background:var(--olive); color:#fff; text-decoration:none;
   box-shadow:0 4px 0 var(--olive-600);
   transition:transform .12s ease, box-shadow .12s ease, background-color .12s ease;
 }
 .btn:hover{ transform:translateY(-1px); }
 .btn:active{ transform:none; box-shadow:0 2px 0 var(--olive-600); }
-/* Accessible focus ring */
 .btn:focus-visible{
-  outline:2px solid #fff;
-  outline-offset:2px;
+  outline:2px solid #fff; outline-offset:2px;
   box-shadow:0 0 0 4px rgba(63,95,59,.35), 0 4px 0 var(--olive-600);
 }
-/* Disable hover lift on touch devices */
 @media (hover:none){ .btn:hover{ transform:none; } }
-
-/* Variants */
 .btn-accent{ background:var(--accent); box-shadow:0 4px 0 #c86445; }
 .btn-accent:active{ box-shadow:0 2px 0 #c86445; }
-
-/* Sizes / utilities (optional) */
 .btn-lg{ font-size:1.125rem; padding:18px 26px; border-radius:16px; }
 .btn-block{ display:flex; width:100%; }
 
-/* ==== Buttons row on product pages ============================ */
+/* Buttons row on product detail pages */
 .actions{
-  display:grid;
-  grid-template-columns:repeat(2, minmax(0,1fr));  /* two side-by-side */
-  gap:12px;
-  align-items:stretch;
-  max-width:68ch;
-  margin:1rem auto 0;
+  display:grid; grid-template-columns:repeat(2, minmax(0,1fr));
+  gap:12px; align-items:stretch;
+  max-width:68ch; margin:1rem auto 0;
 }
-.actions .btn{
-  display:flex;            /* fill the grid cell */
-  width:100%;
-  justify-content:center;
-}
-/* Very narrow phones: stack neatly */
-@media (max-width:360px){
-  .actions{ grid-template-columns:1fr; }
-}
+.actions .btn{ width:100%; justify-content:center; }
+@media (max-width:360px){ .actions{ grid-template-columns:1fr; } }
 
-
-/* ---- Cards / panels ---- */
+/* ---- Cards / shop grid ---- */
 .card{
-  background:var(--card); border:1px solid #eee; border-radius:var(--radius);
-  padding:20px; box-shadow:0 1px 0 #eee;
+  background:var(--card);
+  border:1px solid #eee;
+  border-radius:var(--radius);
+  padding:20px;
+  box-shadow:0 1px 0 #eee;
   display:flex; flex-direction:column;
   transition:transform .12s ease, box-shadow .12s ease;
 }
 .card:hover{ transform:translateY(-2px); box-shadow:0 6px 20px rgba(0,0,0,.06); }
 
-/* Card titles (h3) */
-.card .product-title{
-  font-weight:600; font-size:1.25rem; margin:.75rem 0 .25rem;
+/* Card titles (shop list) */
+.card .product-title,
+.card .product-title a{
+  font-size: clamp(16px, 1.9vw, 20px);
+  font-weight: var(--card-title-weight);
+  line-height: var(--card-title-line);
+  color: var(--olive);
+  margin:.75rem 0 .25rem;
 }
-.card h3 a{ color:var(--olive); text-decoration:none; }
 .card h3 a:hover{ text-decoration:underline; }
 .card h3 a:visited{ color:var(--olive); }
 
-/* Grid */
+.card p{ font-size:.95rem; }              /* lighter body copy in cards */
+
+/* Grid layout */
 .grid{ display:grid; gap:22px; align-items:stretch; }
 .grid-2{ grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); }
 
-/* Keep button block at card bottom */
+/* Keep the last <p> at the bottom of a card (button row) */
 .card p:last-child{ margin-top:auto; margin-bottom:0; }
 
-/* Product image wrapper */
+/* Product image wrapper (square) */
 .product-image{
   width:100%; max-width:200px; aspect-ratio:1/1;
   display:flex; align-items:center; justify-content:center;
   overflow:hidden; background:#fff; margin:0 auto;
 }
-/* Product image itself — mobile-safe */
-.product-image img{
-  width:100%;
-  height:100%;
-  object-fit:contain;
-}
-@media (max-width:600px){
-  .product-image{ max-width:300px; }
+.product-image img{ width:100%; height:100%; object-fit:contain; }
+@media (max-width:600px){ .product-image{ max-width:300px; } }
+
+/* ---- Product detail page only ---- */
+/* Add class="page-product" to the <body> in the product page. */
+.page-product h1{
+  font-size: clamp(1.6rem, 1.1rem + 1.6vw, 2.3rem);
+  font-weight:700;
+  line-height:1.25;
+  letter-spacing:-0.01em;
+  max-width:26ch;           /* keeps long titles readable */
+  margin:.5rem auto 1rem;
+  text-align:center;
 }
 
-/* ===== Fullscreen image overlay ===== */
+/* ---- Fullscreen image overlay (optional utility) ---- */
 #imageOverlay{
-  position:fixed; inset:0; display:none; justify-content:center; align-items:center;
+  position:fixed; inset:0; display:none;
+  justify-content:center; align-items:center;
   background:rgba(0,0,0,.85); z-index:9999;
 }
 #imageOverlay img{
-  max-width:95%; max-height:95%; border-radius:10px; box-shadow:0 12px 40px rgba(0,0,0,.5);
+  max-width:95%; max-height:95%;
+  border-radius:10px; box-shadow:0 12px 40px rgba(0,0,0,.5);
 }
 
-/* Utils */
+/* ---- Utilities ---- */
 .no-scroll{ overflow:hidden; }
 .nowrap{ white-space:nowrap; }
-
-/* Logo */
-header img{ max-height:200px; width:auto; display:block; margin:0 auto; }
-
-/* Affiliate disclosure */
-main p.affiliate-note,
-footer .affiliate-note{
-  text-align:center;
-  margin:.5rem auto 0;
-  max-width:68ch;
-  color:#666;
-  font-size:.9rem;
-}
-
-/* Footer */
-footer{ padding:28px 0; color:#666; }
-
-/* Content flow helper */
 .flow > * + *{ margin-top:1.25rem; }
 
-/* === UI tune — typography & header sizing (2025-08-21) === */
-:root{
-  --logo-max: 130px;      /* header logo max-height */
-  --nav-size: 1.05rem;    /* slightly larger nav */
-  --card-title-size: 1.05rem;
-  --card-title-weight: 600;     /* lighter than bold */
-  --card-title-line: 1.35;
+/* ---- Affiliate disclosure ---- */
+main p.affiliate-note,
+footer .affiliate-note{
+  text-align:center; margin:.5rem auto 0;
+  max-width:68ch; color:#666; font-size:.9rem;
 }
 
-/* Header logo: use a class instead of inline styles */
-.site-logo{
-  max-height: var(--logo-max);
-  height: auto;
-  width: auto;
-  display: block;
-  margin: 0 auto 1rem;
-}
+/* ---- Footer ---- */
+footer{ padding:28px 0; color:#666; }
 
-/* Nav links a little larger with nicer spacing */
-header nav a{
-  font-size: var(--nav-size);
-  padding: 0 .75rem;
-  line-height: 1.6;
+/* ---- Small-screen tweaks ---- */
+@media (max-width:520px){
+  :root{ --logo-max:110px; }
+  nav a{ font-size:1rem; }
 }
-
-/* Product cards: lighten/trim titles and body text */
-.card .product-title,
-.card .product-title a{
-  font-size: var(--card-title-size);
-  font-weight: var(--card-title-weight);
-  line-height: var(--card-title-line);
-}
-
-.card p{
-  font-size: .95rem;      /* body copy a bit lighter */
-}
-
-/* Product detail page (title a bit less heavy) */
-.page-product h1,
-.product-detail h1{
-  font-weight: 700;       /* not extra-black */
-  line-height: 1.25;
-}
-
-/* Optional: buttons not so heavy */
-.btn{
-  font-weight: 600;
-}
-
-/* Small screens tweaks */
-@media (max-width: 520px){
-  :root{ --logo-max: 110px; }
-  header nav a{ font-size: 1rem; }
-}
-/* Product page heading — smaller & lighter than the global h1 */
-.page-product h1{
-  font-size: clamp(1.6rem, 1.1rem + 1.6vw, 2.3rem);
-  font-weight: 700;          /* a bit lighter */
-  line-height: 1.25;         /* tighter line spacing */
-  letter-spacing: -0.01em;   /* tiny optical tweak */
-  max-width: 26ch;           /* keep to readable width */
-  margin: .5rem auto 1rem;   /* space above/below */
-}
-
