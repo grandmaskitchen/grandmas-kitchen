@@ -1,108 +1,100 @@
-// POST /api/admin/backup        (manual)
-// GET  /api/admin/backup?run=1  (allows GET when run=1 present)
-// Saves JSON snapshot of key tables to Supabase Storage: backups/YYYY/MM/DD/backup-<timestamp>.json
+// GET /api/admin/backup?table=products
+// Downloads a JSON backup of the requested table.
+// Hardened: requires Basic Auth here AND via global middleware,
+// and disables any caching at the edge or browser.
 
-export const onRequest = async ({ request, env }) => {
-  try {
-    // --- auth: require token header or ?token= ---
-    const url = new URL(request.url);
-    const token =
-      request.headers.get("X-Backup-Token") ||
-      url.searchParams.get("token") ||
-      "";
-    if (!env.BACKUP_TOKEN || token !== env.BACKUP_TOKEN) {
-      return json({ error: "Unauthorized" }, 401);
-    }
+export const onRequestGet = async ({ request, env }) => {
+  // 1) Require auth here too (defense-in-depth)
+  const auth = requireBasicAuth(request, env);
+  if (auth instanceof Response) return auth; // 401
 
-    // Allow GET only if explicitly asked (so you can hit it from a browser with ?run=1&token=...)
-    if (request.method !== "POST" && !(request.method === "GET" && url.searchParams.get("run") === "1")) {
-      return json({ error: "Use POST (or GET with ?run=1)" }, 405);
-    }
-
-    // --- which tables to snapshot
-    const TABLES = ["products", "shop_products", "clicks"]; // include what you want captured
-
-    // fetch a full copy of each table
-    const snapshot = { meta: {}, tables: {} };
-    snapshot.meta.created_at = new Date().toISOString();
-    snapshot.meta.project = env.SUPABASE_URL;
-
-    for (const t of TABLES) {
-      const rows = await fetchAllRows(env, t);
-      snapshot.tables[t] = rows;
-    }
-
-    const body = JSON.stringify(snapshot);
-    const { path, size } = await saveToStorage(env, body);
-
-    return json({
-      ok: true,
-      saved: { path, bytes: size, tables: Object.keys(snapshot.tables) },
-    });
-  } catch (err) {
-    return json({ error: err?.message || "Backup failed" }, 500);
+  // 2) Whitelist tables you allow to be backed up
+  const url = new URL(request.url);
+  const table = (url.searchParams.get("table") || "").trim();
+  const ALLOW = new Set(["products", "shop_products", "categories"]);
+  if (!ALLOW.has(table)) {
+    return httpJSON({ error: "Invalid table" }, 400);
   }
-};
 
-async function fetchAllRows(env, table) {
-  const base = new URL(`${env.SUPABASE_URL}/rest/v1/${table}`);
-  // you can limit columns if you like; select=*
-  base.searchParams.set("select", "*");
-  base.searchParams.set("order", "id.asc");
-  // paginate in case table grows
-  const pageSize = 1000;
-  let from = 0;
-  let out = [];
-  while (true) {
-    const url = new URL(base);
-    url.searchParams.set("limit", String(pageSize));
-    url.searchParams.set("offset", String(from));
-    const r = await fetch(url.toString(), {
-      headers: {
-        apikey: env.SUPABASE_SERVICE_ROLE_KEY,
-        Authorization: `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}`,
-        Prefer: "count=exact",
-      },
-    });
-    if (!r.ok) throw new Error(`Fetch ${table} failed ${r.status}`);
-    const chunk = await r.json();
-    out = out.concat(chunk);
-    if (chunk.length < pageSize) break;
-    from += pageSize;
-  }
-  return out;
-}
+  // 3) Pull everything from Supabase (adjust select if you want to trim)
+  const sb = new URL(`${env.SUPABASE_URL}/rest/v1/${table}`);
+  sb.searchParams.set("select", "*");
 
-async function saveToStorage(env, body) {
-  // backups/YYYY/MM/DD/backup-<timestamp>.json
-  const now = new Date();
-  const yyyy = String(now.getUTCFullYear());
-  const mm = String(now.getUTCMonth() + 1).padStart(2, "0");
-  const dd = String(now.getUTCDate()).padStart(2, "0");
-  const ts = now.toISOString().replace(/[:.]/g, "-");
-  const path = `backups/${yyyy}/${mm}/${dd}/backup-${ts}.json`;
-
-  const url = `${env.SUPABASE_URL}/storage/v1/object/${encodeURIComponent(path)}`;
-  const r = await fetch(url, {
-    method: "PUT",
+  const r = await fetch(sb.toString(), {
     headers: {
-      "Content-Type": "application/json",
       apikey: env.SUPABASE_SERVICE_ROLE_KEY,
       Authorization: `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}`,
-      "x-upsert": "true",
+      Prefer: "count=exact",
     },
-    body,
   });
-  if (!r.ok) {
-    const text = await r.text();
-    throw new Error(`Storage put failed ${r.status} ${text}`);
-  }
-  return { path, size: body.length };
-}
 
-function json(obj, status = 200) {
+  if (!r.ok) {
+    const txt = await r.text();
+    return httpJSON({ error: `Supabase error ${r.status}`, details: txt }, 500);
+  }
+
+  const rows = await r.json();
+
+  // 4) Return as an attachment with strict no-cache headers
+  const ymd = new Date().toISOString().slice(0, 10).replace(/-/g, "");
+  const filename = `${table}-${ymd}.json`;
+
+  return new Response(JSON.stringify(rows, null, 2), {
+    status: 200,
+    headers: {
+      "Content-Type": "application/json",
+      "Content-Disposition": `attachment; filename="${filename}"`,
+      // absolutely no caching anywhere
+      "Cache-Control": "no-store, no-cache, must-revalidate, private",
+      "Pragma": "no-cache",
+      "Expires": "0",
+      // make sure any cache keys distinguish by auth
+      "Vary": "Authorization",
+      // keep bots away just in case
+      "X-Robots-Tag": "noindex, nofollow",
+    },
+  });
+};
+
+// ---- helpers ----
+
+function httpJSON(obj, status = 200) {
   return new Response(JSON.stringify(obj), {
     status,
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      "Cache-Control": "no-store, private",
+      "Vary": "Authorization",
+      "X-Robots-Tag": "noindex, nofollow",
+    },
   });
+}
+
+// Minimal Basic Auth check (same creds as middleware)
+function requireBasicAuth(request, env) {
+  const realm = env.WORKSHOP_REALM || "Workshop Admin";
+  const challenge = () =>
+    new Response("Unauthorized", {
+      status: 401,
+      headers: { "WWW-Authenticate": `Basic realm="${realm}"` },
+    });
+
+  const header = request.headers.get("Authorization") || "";
+  if (!header.startsWith("Basic ")) return challenge();
+
+  let decoded = "";
+  try {
+    decoded = atob(header.slice(6)); // "user:pass"
+  } catch {
+    return challenge();
+  }
+  const idx = decoded.indexOf(":");
+  const user = idx === -1 ? decoded : decoded.slice(0, idx);
+  const pass = idx === -1 ? "" : decoded.slice(idx + 1);
+
+  if (user !== env.WORKSHOP_USER || pass !== env.WORKSHOP_PASS) {
+    return challenge();
+  }
+  // ok -> return nothing
+  return null;
 }
