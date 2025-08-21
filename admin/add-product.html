@@ -49,6 +49,21 @@
       <select id="shopCategory" name="shop_category_id" required>
         <option value="">— Choose a category —</option>
       </select>
+      <label for="shopCategory">Category *</label>
+      <select id="shopCategory" name="shop_category_id" required>
+      <option value="">— Choose a category —</option>
+      </select>
+
+      <small class="hint">Pick the best fit. You can add more categories later.</small>
+
+      <!-- Inline add-new -->
+      <div class="row" style="margin-top:.35rem">
+      <input id="newCategoryName" type="text" placeholder="New category name (e.g. Water Filters)" />
+      <button id="btnAddCategory" type="button" title="Add new category">Add</button>
+      </div>
+
+      <small class="hint">Can’t see it? Add one here—this will be saved and selected.</small>
+
       <small class="hint">Don’t see one? We can add a “Manage categories” screen later.</small>
 
       <label style="display:flex;gap:.5rem;align-items:center;">
