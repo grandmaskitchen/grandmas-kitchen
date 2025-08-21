@@ -241,4 +241,13 @@ header nav a{
   :root{ --logo-max: 110px; }
   header nav a{ font-size: 1rem; }
 }
+/* Product page heading — smaller & lighter than the global h1 */
+.page-product h1{
+  font-size: clamp(1.6rem, 1.1rem + 1.6vw, 2.3rem);
+  font-weight: 700;          /* a bit lighter */
+  line-height: 1.25;         /* tighter line spacing */
+  letter-spacing: -0.01em;   /* tiny optical tweak */
+  max-width: 26ch;           /* keep to readable width */
+  margin: .5rem auto 1rem;   /* space above/below */
+}
 
