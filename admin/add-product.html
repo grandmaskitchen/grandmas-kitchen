@@ -160,6 +160,11 @@
         } finally {
           btn.disabled = false;
         }
+        <label for="shopCategory">Category *</label>
+        <select id="shopCategory" name="shop_category_id" required>
+        <option value="">— Choose a category —</option>
+        </select>
+        <small class="muted">Don’t see one? We can add a “Manage categories” screen later.</small>
       }
       btn?.addEventListener('click', doFetch);
     })();
