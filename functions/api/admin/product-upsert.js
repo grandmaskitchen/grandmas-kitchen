@@ -16,13 +16,13 @@ export const onRequestPost = async ({ request, env }) => {
   try {
     const incoming = await request.json();
 
-    // --- field aliases we accept from old forms/clients ---
+    // Aliases we accept from older clients
     const synonyms = {
       amazon_descr: "amazon_desc",
       commission_percentage: "commission_l",
     };
 
-    // --- whitelist of columns we allow to be upserted ---
+    // Whitelist of columns we allow
     const allowed = new Set([
       "manufacturer",
       "product_num",
@@ -44,22 +44,20 @@ export const onRequestPost = async ({ request, env }) => {
       "commission_l",
       "approved",
       "added_by",
-      "shop_category_id",  // NEW: FK to categories.id
-      "category_slug"      // NEW: convenience input; we'll resolve to id
+      "shop_category_id",  // REQUIRED: FK to categories.id
+      "category_slug"      // convenience input we resolve to id
     ]);
 
-    // Pick only allowed keys; convert "" -> null; trim strings.
+    // Pick only allowed keys; convert "" -> null; trim strings
     const row = {};
     for (const [k, v] of Object.entries(incoming || {})) {
       const dest = synonyms[k] || k;
       if (!allowed.has(dest)) continue;
       const val = v === "" ? null : v;
-      row[dest] =
-        typeof val === "string" ? val.trim() :
-        val;
+      row[dest] = typeof val === "string" ? val.trim() : val;
     }
 
-    // --- Normalize affiliate_link: accept amzn.to, amazon.* OR bare ASIN ---
+    // Normalize affiliate_link: accept amzn.to, amazon.* OR bare ASIN
     if (typeof incoming.affiliate_link === "string") {
       const raw = incoming.affiliate_link.trim();
       const asinOnly = raw.toUpperCase().match(/^[A-Z0-9]{10}$/);
@@ -70,14 +68,13 @@ export const onRequestPost = async ({ request, env }) => {
       }
     }
 
-    // --- Coerce numeric/boolean fields ---
+    // Coerce numeric/boolean fields
     if (row.commission_l != null && row.commission_l !== "") {
       const n = Number(row.commission_l);
       row.commission_l = Number.isFinite(n) ? n : null;
     } else {
       row.commission_l = null;
     }
-
     row.approved =
       row.approved === true ||
       row.approved === "true" ||
@@ -90,7 +87,7 @@ export const onRequestPost = async ({ request, env }) => {
       request.headers.get("cf-access-authenticated-user-email");
     if (accessEmail && !row.added_by) row.added_by = accessEmail;
 
-    // --- Validation: required fields ---
+    // Validation
     if (!row.my_title || !String(row.my_title).trim()) {
       return json({ error: "my_title is required" }, 400);
     }
@@ -109,22 +106,20 @@ export const onRequestPost = async ({ request, env }) => {
       }, 400);
     }
 
-    // --- Resolve category (REQUIRED) ---
-    // Accept either shop_category_id or category_slug
+    // Resolve category (REQUIRED)
     if (!row.shop_category_id && row.category_slug) {
       const cat = await fetchOneCategoryBySlug(env, String(row.category_slug));
       if (!cat) return json({ error: "Unknown category_slug" }, 400);
       row.shop_category_id = cat.id;
     }
-    // Coerce to integer
     const cid = Number(row.shop_category_id);
     if (!Number.isInteger(cid) || cid <= 0) {
       return json({ error: "Category is required (shop_category_id or category_slug)" }, 400);
     }
     row.shop_category_id = cid;
-    delete row.category_slug; // not a DB column
+    delete row.category_slug;
 
-    // --- product_num: prefer ASIN if detected; else slug of title + short suffix ---
+    // product_num: prefer ASIN if detected; else slug of title + suffix
     if (!row.product_num || !String(row.product_num).trim()) {
       const asin =
         extractASIN(row.affiliate_link) ||
@@ -140,7 +135,7 @@ export const onRequestPost = async ({ request, env }) => {
       row.product_num = String(row.product_num).trim().toLowerCase();
     }
 
-    // ---- Supabase REST upsert (on product_num) ----
+    // Upsert on product_num
     const url = new URL(`${env.SUPABASE_URL}/rest/v1/products`);
     url.searchParams.set("on_conflict", "product_num");
 
@@ -170,7 +165,7 @@ export const onRequestPost = async ({ request, env }) => {
   }
 };
 
-// --- helpers ---------------------------------------------------
+// ---------- helpers ----------
 
 async function fetchOneCategoryBySlug(env, slug) {
   const u = new URL(`${env.SUPABASE_URL}/rest/v1/categories`);
@@ -195,7 +190,7 @@ function json(obj, status = 200) {
   });
 }
 
-// Try hard to find a 10-char ASIN in a URL or raw string
+// Try to find a 10-char ASIN in a URL or raw string
 function extractASIN(s) {
   if (!s) return null;
   const raw = String(s).trim();
@@ -204,21 +199,21 @@ function extractASIN(s) {
   const mBare = raw.match(/^[A-Z0-9]{10}$/i);
   if (mBare) return mBare[0].toUpperCase();
 
-  // Look inside something that might be a URL or title string
+  // Look inside a proper URL, if it is one
   try {
-    // If it's a URL, parse cleanly
     const u = new URL(raw);
     const mPath =
       u.pathname.match(/\/dp\/([A-Z0-9]{10})/i) ||
       u.pathname.match(/\/gp\/product\/([A-Z0-9]{10})/i);
     if (mPath) return mPath[1].toUpperCase();
+
     const mQuery = u.search.match(/[?&]asin=([A-Z0-9]{10})/i);
     if (mQuery) return mQuery[1].toUpperCase();
   } catch {
-    // Not a URL—fall through to generic scan
+    // not a URL; fall through
   }
 
-  // Generic scan anywhere in the string
+  // Generic scan
   const mScan =
     raw.match(/\b([A-Z0-9]{10})\b/) ||
     raw.match(/asin[:\s-]*([A-Z0-9]{10})/i);
@@ -228,5 +223,9 @@ function extractASIN(s) {
 function slugify(s) {
   return String(s || "")
     .toLowerCase()
-    .normalize("NFKD")                 // split accents
-    .replace(/[\u0300-\u036f]/g, "")   //
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")     // strip accents
+    .replace(/[^a-z0-9]+/g, "-")         // non-alnum -> dash
+    .replace(/^-+|-+$/g, "")             // trim dashes
+    .slice(0, 60);                       // keep short for URLs
+}
