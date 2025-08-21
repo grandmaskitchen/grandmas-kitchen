@@ -1,291 +1,199 @@
-// Admin: Fetch basic product details from an Amazon URL or ASIN.
-// POST /api/admin/amazon-fetch   -> { scraped: { ... } }
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Add Product • Grandma’s Kitchen (Admin)</title>
+  <meta name="robots" content="noindex,nofollow" />
+  <style>
+    body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;background:#fffdf8;color:#222;margin:0;padding:24px}
+    .wrap{max-width:760px;margin:0 auto}
+    h1{font-size:1.6rem;margin:0 0 1rem}
+    form{display:grid;gap:12px;background:#fff;padding:16px;border-radius:10px;box-shadow:0 2px 8px rgba(0,0,0,.06)}
+    label{font-weight:600}
+    input,textarea,select{width:100%;box-sizing:border-box;padding:.6rem;border:1px solid #cfcfcf;border-radius:8px;font-size:1rem}
+    .row{display:grid;grid-template-columns:1fr auto;gap:12px}
+    .actions{display:flex;gap:12px;align-items:center;margin-top:.5rem}
+    .hint{font-size:.85rem;color:#666}
+    button{background:#44633F;color:#fff;border:0;border-radius:8px;padding:.7rem 1rem;cursor:pointer}
+    button.secondary{background:#ddd;color:#222}
+    #fetchStatus{font-size:.9rem;color:#666}
+    #preview{display:none;background:#fff7ea;border:1px solid #eee;border-radius:10px;padding:12px}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>📦 Add a New Product</h1>
 
-export const onRequestOptions = ({ request }) =>
-  new Response(null, {
-    status: 204,
-    headers: corsHeaders(request),
-  });
+    <form id="productForm" autocomplete="off">
+      <!-- Amazon link + Fetch -->
+      <label for="affiliate_link">Amazon Link or ASIN *</label>
+      <div class="row">
+        <input id="affiliate_link" name="affiliate_link" type="text" placeholder="https://amzn.to/... or https://www.amazon.co.uk/... or ASIN" required />
+        <button id="fetchAmazon" type="button" title="Fetch details from Amazon">Fetch</button>
+      </div>
+      <span id="fetchStatus" class="hint"></span>
 
-export const onRequestPost = async ({ request, env }) => {
-  // Optional defense-in-depth (your global _middleware should already gate /admin)
-  const auth = requireBasicAuthIfConfigured(request, env);
-  if (auth instanceof Response) return auth;
+      <!-- Minimal authoring fields -->
+      <label for="my_title">My Title *</label>
+      <input id="my_title" name="my_title" required />
 
-  try {
-    const { input } = await request.json();
-    if (!input || !String(input).trim()) {
-      return jerr("input is required", 400, request);
-    }
+      <label for="image_main">Main Image URL *</label>
+      <input id="image_main" name="image_main" type="url" required placeholder="https://..." />
 
-    // 1) Normalize to an Amazon product URL
-    const { url, asin, source } = await normalizeAmazonInput(input);
+      <label for="my_description_short">Short Description</label>
+      <textarea id="my_description_short" name="my_description_short" rows="2"></textarea>
 
-    // 2) Try to fetch the page
-    const res = await fetch(url, {
-      redirect: "follow",
-      cf: { cacheTtl: 0, cacheEverything: false },
-      headers: {
-        // Reasonable headers to avoid bot challenges as much as possible
-        "User-Agent":
-          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36",
-        "Accept-Language": "en-GB,en;q=0.9",
-        Accept:
-          "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
-      },
-    });
+      <!-- REQUIRED: our curated category -->
+      <label for="shopCategory">Category *</label>
+      <select id="shopCategory" name="shop_category_id" required>
+        <option value="">— Choose a category —</option>
+      </select>
+      <small class="hint">Don’t see one? We can add a “Manage categories” screen later.</small>
 
-    const html = await res.text();
+      <label style="display:flex;gap:.5rem;align-items:center;">
+        <input type="checkbox" id="approved" name="approved" value="true" />
+        Approved
+      </label>
 
-    // If we got challenged or blocked, still return what we can.
-    if (!res.ok || !html || /captcha|robot check/i.test(html)) {
-      return jok(
-        {
-          scraped: minimalFrom(url, asin),
-          warning:
-            "Could not fully parse product page (blocked or unexpected HTML).",
-        },
-        request
-      );
-    }
+      <!-- hidden fields we still store -->
+      <input type="hidden" id="amazon_title" name="amazon_title" />
+      <input type="hidden" id="amazon_desc"  name="amazon_desc" />
+      <input type="hidden" id="image_small"   name="image_small" />
+      <input type="hidden" id="image_extra_1" name="image_extra_1" />
+      <input type="hidden" id="image_extra_2" name="image_extra_2" />
+      <input type="hidden" id="amazon_category" name="amazon_category" />
+      <input type="hidden" id="product_num"  name="product_num" />
 
-    // 3) Scrape bits we care about (best-effort)
-    const scraped = {
-      affiliate_link: url,
-      amazon_title:
-        pickMeta(html, /property=["']og:title["']|name=["']og:title["']/i) ||
-        textBetween(html, /<span[^>]+id=["']productTitle["'][^>]*>/i, /<\/span>/i) ||
-        pickTitleTag(html) ||
-        "",
-      amazon_desc:
-        pickMeta(html, /name=["']description["']/i) ||
-        pickMeta(html, /property=["']og:description["']/i) ||
-        "",
-      image_main:
-        pickMeta(html, /property=["']og:image["']|name=["']og:image["']/i) ||
-        firstImageCandidate(html) ||
-        "",
-      image_extra_1: null,
-      image_extra_2: null,
-      amazon_category:
-        pickMeta(html, /property=["']og:site_name["']/i) ||
-        guessCategoryFromBreadcrumb(html) ||
-        null,
-    };
+      <div class="actions">
+        <button type="submit">Submit</button>
+        <a class="secondary" href="/shop.html"><button type="button" class="secondary">Back to Pantry</button></a>
+      </div>
+    </form>
 
-    // Tidy fields
-    scraped.amazon_title = clean(scraped.amazon_title).slice(0, 300);
-    scraped.amazon_desc = clean(scraped.amazon_desc).slice(0, 800);
+    <div id="preview" class="wrap"></div>
+  </div>
 
-    // If we still have no image, try one more heuristic
-    if (!scraped.image_main) {
-      scraped.image_main = guessImageFromDataHtml(html) || "";
-    }
+  <!-- Amazon fetch wiring ONLY (submission handled in /admin/admin.js) -->
+  <script>
+    (function () {
+      const btn = document.getElementById('fetchAmazon');
+      const statusEl = document.getElementById('fetchStatus');
+      const byName = (n) => document.querySelector(`[name="${n}"]`);
 
-    return jok({ scraped, source }, request);
-  } catch (err) {
-    return jerr(err?.message || "Server error", 500, request);
-  }
-};
+      const FIELDS_TO_CLEAR = [
+        'amazon_title','amazon_desc','image_main','image_small',
+        'image_extra_1','image_extra_2','amazon_category',
+        'my_title','my_description_short'
+      ];
+      function clearAutoFields() {
+        FIELDS_TO_CLEAR.forEach((name) => {
+          const el = byName(name);
+          if (el) el.value = '';
+        });
+      }
 
-/* ---------------- helpers ---------------- */
+      function extractASIN(s) {
+        try {
+          if (/^[A-Z0-9]{10}$/i.test((s||'').trim())) return s.trim().toUpperCase();
+          const u = new URL(s);
+          const m =
+            u.pathname.match(/\/dp\/([A-Z0-9]{10})/i) ||
+            u.pathname.match(/\/gp\/product\/([A-Z0-9]{10})/i) ||
+            u.search.match(/[?&]asin=([A-Z0-9]{10})/i);
+          return (m && m[1] && m[1].toUpperCase()) || '';
+        } catch { return ''; }
+      }
 
-function corsHeaders(request) {
-  const origin = request.headers.get("Origin") || "*";
-  return {
-    "Access-Control-Allow-Origin": origin,
-    "Access-Control-Allow-Credentials": "true",
-    "Access-Control-Allow-Methods": "POST, OPTIONS",
-    "Access-Control-Allow-Headers":
-      "Content-Type, Authorization, Cf-Access-Jwt-Assertion",
-    "Cache-Control": "no-store",
-  };
-}
+      async function doFetch() {
+        const inputEl = document.getElementById('affiliate_link');
+        let input = (inputEl?.value || '').trim();
+        if (!input) {
+          input = prompt('Paste an Amazon URL or ASIN:') || '';
+          input = input.trim();
+          if (!input) return;
+          if (inputEl) inputEl.value = input;
+        }
 
-function jok(obj, request) {
-  return new Response(JSON.stringify(obj), {
-    status: 200,
-    headers: { "Content-Type": "application/json", ...corsHeaders(request) },
-  });
-}
-function jerr(error, status, request) {
-  return new Response(JSON.stringify({ error }), {
-    status,
-    headers: { "Content-Type": "application/json", ...corsHeaders(request) },
-  });
-}
+        clearAutoFields();
+        statusEl.textContent = 'Fetching product details…';
+        btn.disabled = true;
+        try {
+          const r = await fetch('/api/admin/amazon-fetch', {
+            method:'POST',
+            headers:{ 'Content-Type':'application/json' },
+            body: JSON.stringify({ input })
+          });
 
-// Optional Basic Auth on this function (uses WORKSHOP_USER/PASS if set)
-function requireBasicAuthIfConfigured(request, env) {
-  if (!env.WORKSHOP_USER || !env.WORKSHOP_PASS) return null; // not enforced here
-  const realm = env.WORKSHOP_REALM || "Workshop Admin";
-  const challenge = () =>
-    new Response("Unauthorized", {
-      status: 401,
-      headers: { "WWW-Authenticate": `Basic realm="${realm}"` },
-    });
+          const text = await r.text();
+          let json;
+          try { json = JSON.parse(text); } catch { throw new Error(text?.slice(0,160) || 'Non-JSON response'); }
+          if (!r.ok) throw new Error(json?.error?.message || json?.message || 'Fetch failed');
 
-  const header = request.headers.get("Authorization") || "";
-  if (!header.startsWith("Basic ")) return challenge();
-  let decoded = "";
-  try {
-    decoded = atob(header.slice(6));
-  } catch {
-    return challenge();
-  }
-  const idx = decoded.indexOf(":");
-  const user = idx === -1 ? decoded : decoded.slice(0, idx);
-  const pass = idx === -1 ? "" : decoded.slice(idx + 1);
-  if (user !== env.WORKSHOP_USER || pass !== env.WORKSHOP_PASS) return challenge();
-  return null;
-}
+          const s = json.scraped || {};
+          const setIfEmpty = (name, val) => {
+            if (!val) return;
+            const el = byName(name);
+            if (el && !el.value) el.value = val;
+          };
 
-/* ---------- input normalization ---------- */
+          // Populate fields
+          setIfEmpty('amazon_title', s.amazon_title);
+          setIfEmpty('amazon_desc',  s.amazon_desc);
+          setIfEmpty('image_main',   s.image_main);
+          setIfEmpty('image_small',  s.image_small || s.image_main);
+          setIfEmpty('image_extra_1', s.image_extra_1);
+          setIfEmpty('image_extra_2', s.image_extra_2);
+          setIfEmpty('amazon_category', s.amazon_category);
 
-async function normalizeAmazonInput(raw) {
-  const s = String(raw).trim();
+          // Authoring defaults
+          setIfEmpty('my_title', s.amazon_title);
+          const short = byName('my_description_short');
+          if (short && !short.value && s.amazon_desc) short.value = s.amazon_desc.slice(0, 240);
 
-  // Bare ASIN (10 alnum)
-  const mAsin = s.match(/^[A-Z0-9]{10}$/i);
-  if (mAsin) {
-    const asin = mAsin[0].toUpperCase();
-    return {
-      asin,
-      url: `https://www.amazon.co.uk/dp/${asin}`,
-      source: "asin",
-    };
-  }
+          // Normalize link & derive product_num (ASIN)
+          if (s.affiliate_link) {
+            byName('affiliate_link').value = s.affiliate_link;
+          }
+          const asin = extractASIN(byName('affiliate_link').value) || extractASIN(input);
+          if (asin) byName('product_num').value = asin.toLowerCase();
 
-  // If it looks like a URL, resolve
-  let u;
-  try {
-    u = new URL(s);
-  } catch {
-    // Fallback: treat as ASIN-like text inside
-    const asin2 = extractASIN(s);
-    const url2 = asin2
-      ? `https://www.amazon.co.uk/dp/${asin2}`
-      : "https://www.amazon.co.uk/";
-    return { asin: asin2, url: url2, source: "string" };
-  }
+          statusEl.textContent = 'Filled from Amazon. Review fields, then Submit.';
+        } catch (err) {
+          alert('Fetch failed: ' + err.message);
+          statusEl.textContent = 'Fetch failed.';
+        } finally {
+          btn.disabled = false;
+        }
+      }
 
-  // Resolve amzn.to short links (follow redirects)
-  if (/^amzn\.to$/i.test(u.hostname)) {
-    const head = await fetch(u.toString(), { redirect: "follow" });
-    const finalURL = head.url || u.toString();
-    const asin = extractASIN(finalURL);
-    return {
-      asin,
-      url: asin ? `https://www.amazon.co.uk/dp/${asin}` : finalURL,
-      source: "amzn.to",
-    };
-  }
+      btn?.addEventListener('click', doFetch);
+    })();
+  </script>
 
-  // Amazon URL of some sort
-  if (/amazon\./i.test(u.hostname)) {
-    const asin = extractASIN(u.toString());
-    return {
-      asin,
-      url: asin ? `https://www.amazon.co.uk/dp/${asin}` : u.toString(),
-      source: "amazon",
-    };
-  }
+  <!-- Load categories for the select -->
+  <script>
+    (async function loadCategories(){
+      const sel = document.getElementById('shopCategory');
+      if (!sel) return;
+      try {
+        const r = await fetch('/api/admin/categories-list');
+        const { items } = await r.json();
+        if (Array.isArray(items)) {
+          for (const c of items) {
+            const opt = document.createElement('option');
+            opt.value = c.id;
+            opt.textContent = c.name;
+            sel.appendChild(opt);
+          }
+        }
+      } catch (e) {
+        console.error('Failed to load categories', e);
+      }
+    })();
+  </script>
 
-  // Unknown -> just echo back
-  const fallbackAsin = extractASIN(s);
-  return {
-    asin: fallbackAsin,
-    url: fallbackAsin ? `https://www.amazon.co.uk/dp/${fallbackAsin}` : s,
-    source: "unknown",
-  };
-}
-
-function extractASIN(s) {
-  if (!s) return null;
-  // /dp/ASIN or /gp/product/ASIN or ?asin=ASIN
-  const m =
-    s.match(/\/dp\/([A-Z0-9]{10})/i) ||
-    s.match(/\/gp\/product\/([A-Z0-9]{10})/i) ||
-    s.match(/[?&]asin=([A-Z0-9]{10})/i);
-  return m ? m[1].toUpperCase() : null;
-}
-
-/* ---------- scraping primitives ---------- */
-
-function pickMeta(html, attrRegex) {
-  // Finds <meta ... content="..."> where the tag matches attrRegex
-  const re = new RegExp(
-    `<meta[^>]+(?:${attrRegex.source})[^>]+content=["']([^"']+)["'][^>]*>`,
-    "i"
-  );
-  const m = html.match(re);
-  return m ? decodeEntities(m[1]) : "";
-}
-
-function pickTitleTag(html) {
-  const m = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
-  return m ? decodeEntities(stripTags(m[1])) : "";
-}
-
-function textBetween(html, startRe, endRe) {
-  const start = html.search(startRe);
-  if (start === -1) return "";
-  const slice = html.slice(start);
-  const end = slice.search(endRe);
-  const inner = end === -1 ? slice : slice.slice(0, end);
-  return decodeEntities(stripTags(inner));
-}
-
-function firstImageCandidate(html) {
-  // Try the main image container
-  const m = html.match(
-    /<img[^>]+id=["']landingImage["'][^>]+data-old-hires=["']([^"']+)["'][^>]*>/i
-  );
-  if (m) return decodeEntities(m[1]);
-  // fallback: any product image CDN
-  const m2 = html.match(/https:\/\/m\.media-amazon\.com\/images\/[^"'<>\s]+/i);
-  return m2 ? decodeEntities(m2[0]) : "";
-}
-
-function guessImageFromDataHtml(html) {
-  const m = html.match(/"hiRes"\s*:\s*"([^"]+)"/i);
-  return m ? decodeEntities(m[1]) : "";
-}
-
-function guessCategoryFromBreadcrumb(html) {
-  // Amazon often has "breadcrumb" list items or data-attributes with category text.
-  const m =
-    html.match(/<a[^>]+class=["'][^"']*breadcrumb[^"']*["'][^>]*>([\s\S]*?)<\/a>/i) ||
-    html.match(/<li[^>]+class=["'][^"']*breadcrumb[^"']*["'][^>]*>([\s\S]*?)<\/li>/i);
-  return m ? clean(stripTags(m[1])) : null;
-}
-
-/* ---------- tiny utils ---------- */
-
-function decodeEntities(s) {
-  return String(s)
-    .replace(/&amp;/g, "&")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'");
-}
-function stripTags(s) {
-  return String(s).replace(/<[^>]*>/g, " ");
-}
-function clean(s) {
-  return String(s).replace(/\s+/g, " ").trim();
-}
-
-function minimalFrom(url, asin) {
-  return {
-    affiliate_link: url,
-    amazon_title: "",
-    amazon_desc: "",
-    image_main: "",
-    image_extra_1: null,
-    image_extra_2: null,
-    amazon_category: null,
-    asin: asin || extractASIN(url),
-  };
-}
+  <!-- Handles validation + POST to /api/admin/product-upsert -->
+  <script src="/admin/admin.js" defer></script>
+</body>
+</html>
