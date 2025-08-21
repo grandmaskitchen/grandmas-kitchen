@@ -1,3 +1,5 @@
+Amazon-fetch
+
 <!doctype html>
 <html lang="en">
 <head>
@@ -19,6 +21,7 @@
     button.secondary{background:#ddd;color:#222}
     #fetchStatus{font-size:.9rem;color:#666}
     #preview{display:none;background:#fff7ea;border:1px solid #eee;border-radius:10px;padding:12px}
+    a.btn-link{display:inline-block;background:#ddd;color:#222;border-radius:8px;padding:.7rem 1rem;text-decoration:none}
   </style>
 </head>
 <body>
@@ -49,7 +52,14 @@
       <select id="shopCategory" name="shop_category_id" required>
         <option value="">— Choose a category —</option>
       </select>
-      <small class="hint">Don’t see one? We can add a “Manage categories” screen later.</small>
+      <small class="hint">Pick the best fit. You can add more categories later.</small>
+
+      <!-- Inline add-new -->
+      <div class="row" style="margin-top:.35rem">
+        <input id="newCategoryName" type="text" placeholder="New category name (e.g. Water Filters)" />
+        <button id="btnAddCategory" type="button" title="Add new category">Add</button>
+      </div>
+      <small class="hint">Can’t see it? Add one here—this will be saved and selected.</small>
 
       <label style="display:flex;gap:.5rem;align-items:center;">
         <input type="checkbox" id="approved" name="approved" value="true" />
@@ -67,7 +77,7 @@
 
       <div class="actions">
         <button type="submit">Submit</button>
-        <a class="secondary" href="/shop.html"><button type="button" class="secondary">Back to Pantry</button></a>
+        <a class="btn-link" href="/shop.html">Back to Pantry</a>
       </div>
     </form>
 
@@ -79,7 +89,7 @@
     (function () {
       const btn = document.getElementById('fetchAmazon');
       const statusEl = document.getElementById('fetchStatus');
-      const byName = (n) => document.querySelector(`[name="${n}"]`);
+      const byName = (n) => document.querySelector(\`[name="\${n}"]\`);
 
       const FIELDS_TO_CLEAR = [
         'amazon_title','amazon_desc','image_main','image_small',
@@ -98,8 +108,8 @@
           if (/^[A-Z0-9]{10}$/i.test((s||'').trim())) return s.trim().toUpperCase();
           const u = new URL(s);
           const m =
-            u.pathname.match(/\/dp\/([A-Z0-9]{10})/i) ||
-            u.pathname.match(/\/gp\/product\/([A-Z0-9]{10})/i) ||
+            u.pathname.match(/\\/dp\\/([A-Z0-9]{10})/i) ||
+            u.pathname.match(/\\/gp\\/product\\/([A-Z0-9]{10})/i) ||
             u.search.match(/[?&]asin=([A-Z0-9]{10})/i);
           return (m && m[1] && m[1].toUpperCase()) || '';
         } catch { return ''; }
@@ -121,9 +131,17 @@
         try {
           const r = await fetch('/api/admin/amazon-fetch', {
             method:'POST',
+            credentials: 'include',         // send auth cookies
+            cache: 'no-store',
             headers:{ 'Content-Type':'application/json' },
             body: JSON.stringify({ input })
           });
+
+          if (r.status === 401) {
+            statusEl.textContent = 'Sign in required.';
+            alert('You are not signed in (401). Refresh this page to sign in, then try Fetch again.');
+            return;
+          }
 
           const text = await r.text();
           let json;
@@ -171,25 +189,61 @@
     })();
   </script>
 
-  <!-- Load categories for the select -->
+  <!-- Categories: load list + add-new inline -->
   <script>
-    (async function loadCategories(){
-      const sel = document.getElementById('shopCategory');
-      if (!sel) return;
-      try {
-        const r = await fetch('/api/admin/categories-list');
+    async function loadCategoriesInto(selectEl){
+      try{
+        const r = await fetch('/api/admin/categories', { credentials: 'include', cache: 'no-store' });
         const { items } = await r.json();
-        if (Array.isArray(items)) {
-          for (const c of items) {
+        const current = selectEl.value || '';
+        selectEl.innerHTML = '<option value="">— Choose a category —</option>';
+        if (Array.isArray(items)){
+          items.forEach(c=>{
             const opt = document.createElement('option');
             opt.value = c.id;
             opt.textContent = c.name;
-            sel.appendChild(opt);
-          }
+            selectEl.appendChild(opt);
+          });
         }
-      } catch (e) {
+        if (current) selectEl.value = current; // preserve selection if possible
+      }catch(e){
         console.error('Failed to load categories', e);
       }
+    }
+
+    async function addNewCategory(){
+      const input = document.getElementById('newCategoryName');
+      const name = (input.value || '').trim();
+      if (!name){ alert('Please enter a category name.'); return; }
+      const btn = document.getElementById('btnAddCategory');
+      btn.disabled = true;
+      try{
+        const r = await fetch('/api/admin/categories', {
+          method:'POST',
+          headers:{ 'Content-Type':'application/json' },
+          credentials: 'include',
+          cache: 'no-store',
+          body: JSON.stringify({ name })
+        });
+        const j = await r.json();
+        if (!r.ok || !j?.category?.id) throw new Error(j?.error || 'Create failed');
+
+        // refresh list and select new one
+        const sel = document.getElementById('shopCategory');
+        await loadCategoriesInto(sel);
+        sel.value = j.category.id;
+        input.value = '';
+      }catch(e){
+        alert('Could not add category: ' + (e.message || e));
+      }finally{
+        btn.disabled = false;
+      }
+    }
+
+    (async function initCategories(){
+      const sel = document.getElementById('shopCategory');
+      await loadCategoriesInto(sel);
+      document.getElementById('btnAddCategory')?.addEventListener('click', addNewCategory);
     })();
   </script>
 
