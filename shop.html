@@ -11,6 +11,8 @@
     @keyframes shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
     .skeleton.img{width:200px;height:200px;border-radius:12px;margin:0 auto 10px}
     .skeleton.text{height:16px;border-radius:8px;margin:6px 0}
+    .cat-link{ text-decoration:none; }
+    .cat-link:hover{ text-decoration:underline; }
   </style>
 </head>
 <body>
@@ -31,6 +33,7 @@
 <main>
   <div class="container container--narrow">
     <h1>🛒 Grandma’s Pantry</h1>
+    <p id="catNotice" class="muted" style="display:none;margin-top:.25rem"></p>
   </div>
 
   <div class="container">
@@ -60,39 +63,52 @@
 <script>
 (async function () {
   const grid = document.getElementById('grid');
+  const catNotice = document.getElementById('catNotice');
   const esc = s => (s||'').replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m]));
+  const params = new URLSearchParams(location.search);
+  const catParam = (params.get('cat') || '').trim();
 
   try {
-    const r = await fetch('/api/shop-list?limit=100');
-    const data = await r.json();
-    if (!r.ok) throw new Error(data.error || 'Failed to load');
+    const r = await fetch('/api/shop-list?limit=100', { cache: 'no-store' });
+    const json = await r.json();
+    const items = Array.isArray(json.items) ? json.items : (Array.isArray(json.products) ? json.products : []);
+    if (!r.ok) throw new Error(json?.error || 'Failed to load');
 
-    // Accept either "items" or "products"
-    const items = Array.isArray(data.items)
-      ? data.items
-      : (Array.isArray(data.products) ? data.products : []);
+    // Optional: client-side category filter by exact name (case-insensitive)
+    let list = items;
+    if (catParam) {
+      const needle = catParam.toLowerCase();
+      list = items.filter(p => (p.amazon_category || '').toLowerCase() === needle);
+      // Show notice + clear link
+      catNotice.style.display = 'block';
+      catNotice.innerHTML = `Showing category: <strong>${esc(catParam)}</strong> • <a href="/shop.html">Clear filter</a>`;
+    }
 
-    if (!items.length) {
-      grid.innerHTML = `<p class="muted">No products yet.</p>`;
+    if (!list.length) {
+      grid.innerHTML = catParam
+        ? `<p class="muted">No products in “${esc(catParam)}”. <a href="/shop.html">Clear filter</a></p>`
+        : `<p class="muted">No products yet.</p>`;
       return;
     }
 
-    grid.innerHTML = items.map(p => {
+    grid.innerHTML = list.map(p => {
       const title = p.my_title || p.amazon_title || 'Product';
       const img = p.image_main || '';
       const slug = p.product_num || '';
       const cat  = p.amazon_category || '';
-
+      const href = `/products/${encodeURIComponent(slug)}`;
       return `
         <article class="card" aria-labelledby="prod-${esc(slug)}-title">
-          <a class="product-image" href="/products/${encodeURIComponent(slug)}">
+          <a class="product-image" href="${href}">
             ${img ? `<img loading="lazy" decoding="async" src="${esc(img)}" alt="${esc(title)}">` : ''}
           </a>
           <h3 id="prod-${esc(slug)}-title" class="product-title">
-            <a href="/products/${encodeURIComponent(slug)}">${esc(title)}</a>
+            <a href="${href}">${esc(title)}</a>
           </h3>
-          ${cat ? `<p class="muted" style="margin:.25rem 0 .5rem">${esc(cat)}</p>` : ''}
-          <p><a class="btn" href="/products/${encodeURIComponent(slug)}">View product</a></p>
+          ${cat ? `<p class="muted" style="margin:.25rem 0 .5rem;font-size:.95rem">
+                     <a class="cat-link" href="/shop.html?cat=${encodeURIComponent(cat)}">${esc(cat)}</a>
+                   </p>` : ''}
+          <p><a class="btn" href="${href}">View product</a></p>
         </article>
       `;
     }).join('');
