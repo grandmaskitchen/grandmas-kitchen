@@ -88,7 +88,7 @@ function rowHTML(p) {
     : (p.category_name ? `<span class="chip">${esc(p.category_name)}</span>` : '—');
 
   return `
-  <tr data-num="${esc(p.product_num||'')}">
+  <tr data-id="${esc(p.id)}" data-num="${esc(p.product_num||'')}">
     <td class="center"><input type="checkbox" class="chk"/></td>
     <td>
       <div style="display:flex;gap:10px;align-items:center">
@@ -139,9 +139,9 @@ async function fetchList() {
   $$('#rows .approve').forEach(btn => {
     btn.addEventListener('click', async (e) => {
       const tr = e.currentTarget.closest('tr');
-      const num = tr?.dataset?.num;
-      if (!num) return;
-      await approveOne(num, tr);
+      const id = Number(tr?.dataset?.id);
+      if (!Number.isFinite(id)) return alert('Missing row id');
+      await approveOne(id, tr);
     });
   });
 
@@ -154,9 +154,10 @@ function wireRowCategoryEditors(){
     sel.addEventListener('change', async (e) => {
       const selEl = e.currentTarget;
       const tr = selEl.closest('tr');
-      const num = tr?.dataset?.num;
+      const id = Number(tr?.dataset?.id);
+      const num = tr?.dataset?.num; // kept for backward-compat
       const status = tr.querySelector('.saveStatus');
-      if (!num) return;
+      if (!Number.isFinite(id)) return alert('Missing row id');
 
       const newId = selEl.value ? Number(selEl.value) : null;
 
@@ -167,7 +168,8 @@ function wireRowCategoryEditors(){
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ product_num: num, shop_category_id: newId }),
+        // send both id and product_num; server can use id primarily
+        body: JSON.stringify({ id, product_num: num, shop_category_id: newId }),
       });
       const j = await r.json().catch(()=>({}));
 
@@ -183,7 +185,7 @@ function wireRowCategoryEditors(){
   });
 }
 
-async function approveOne(productNum, rowEl) {
+async function approveOne(id, rowEl) {
   const btn = rowEl?.querySelector('.approve');
   if (btn) { btn.disabled = true; btn.textContent = 'Approving…'; }
 
@@ -191,7 +193,7 @@ async function approveOne(productNum, rowEl) {
     method: 'POST',
     credentials: 'include',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ product_num: productNum, approved: true }),
+    body: JSON.stringify({ id, approved: true }),
   });
   const j = await r.json().catch(()=>({}));
   if (!r.ok) {
@@ -216,8 +218,9 @@ async function approveSelected() {
   if (!rows.length) { alert('No rows selected.'); return; }
   if (!confirm(`Approve ${rows.length} selected product(s)?`)) return;
   for (const tr of rows) {
-    const num = tr.dataset.num;
-    await approveOne(num, tr);
+    const id = Number(tr.dataset.id);
+    if (!Number.isFinite(id)) { alert('Missing row id'); continue; }
+    await approveOne(id, tr);
   }
 }
 
