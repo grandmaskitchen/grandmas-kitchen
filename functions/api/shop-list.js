@@ -8,6 +8,7 @@ export const onRequestGet = async ({ request, env }) => {
     const url = new URL(request.url);
     const q = (url.searchParams.get("q") || "").trim();
     const limit = Number(url.searchParams.get("limit") || 100);
+    const category = (url.searchParams.get("category") || "").trim();
 
     // Only fetch columns the shop needs
     const sb = new URL(`${env.SUPABASE_URL}/rest/v1/products`);
@@ -20,7 +21,7 @@ export const onRequestGet = async ({ request, env }) => {
         "my_description_short",
         "image_main",
         "affiliate_link",
-        "amazon_category", // used by shop.html
+        "amazon_category",
         "approved",
         "created_at",
       ].join(",")
@@ -29,10 +30,15 @@ export const onRequestGet = async ({ request, env }) => {
     sb.searchParams.set("order", "created_at.desc");
     if (limit > 0) sb.searchParams.set("limit", String(limit));
 
+    // Text search
     if (q) {
       const term = `*${q}*`;
-      // PostgREST OR needs parentheses
       sb.searchParams.set("or", `(my_title.ilike.${term},amazon_title.ilike.${term})`);
+    }
+
+    // Category filter
+    if (category) {
+      sb.searchParams.set("amazon_category", `eq.${category}`);
     }
 
     const r = await fetch(sb.toString(), {
@@ -55,13 +61,12 @@ export const onRequestGet = async ({ request, env }) => {
     const unique = [];
     for (const row of rows || []) {
       const key = (row.product_num || "").toLowerCase();
-      if (!key) continue;           // skip rows without a key
-      if (seen.has(key)) continue;  // already have a newer one
+      if (!key) continue;
+      if (seen.has(key)) continue;
       seen.add(key);
       unique.push(row);
     }
 
-    // Return BOTH keys so old/new front-ends work
     return json(
       { items: unique, products: unique, count: unique.length },
       200,
