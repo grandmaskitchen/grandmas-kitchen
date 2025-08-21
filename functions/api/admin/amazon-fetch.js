@@ -1,5 +1,3 @@
-202508212353 - functions/api/admin/amazon-fetch
-
 // Admin: Fetch basic product details from an Amazon URL or ASIN.
 // POST /api/admin/amazon-fetch   -> { scraped: { ... } }
 
