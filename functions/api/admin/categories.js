@@ -1,19 +1,25 @@
-// GET /api/admin/categories -> { items:[{id,name,slug}] }
+// /functions/api/admin/categories-list.js
+// GET -> { items: [{id, name, slug}, ...] }
+
 export const onRequestGet = async ({ env }) => {
   try {
-    const url = new URL(`${env.SUPABASE_URL}/rest/v1/shop_categories`);
-    url.searchParams.set('select', 'id,name,slug');
-    url.searchParams.set('order', 'name.asc');
+    const u = new URL(`${env.SUPABASE_URL}/rest/v1/categories`);
+    u.searchParams.set('select', 'id,name,slug');
+    u.searchParams.set('order', 'name.asc');
 
-    const r = await fetch(url.toString(), {
+    const r = await fetch(u.toString(), {
       headers: {
         apikey: env.SUPABASE_SERVICE_ROLE_KEY,
         Authorization: `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}`,
       },
     });
+
+    if (!r.ok) {
+      const text = await r.text();
+      return json({ error: 'Supabase error', details: text }, 500);
+    }
     const rows = await r.json();
-    if (!r.ok) return json({ error: 'Failed to list categories', details: rows }, 500);
-    return json({ items: rows });
+    return json({ items: rows || [] });
   } catch (e) {
     return json({ error: e?.message || 'Server error' }, 500);
   }
