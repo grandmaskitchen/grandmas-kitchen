@@ -1,5 +1,3 @@
-Amazon-fetch
-
 <!doctype html>
 <html lang="en">
 <head>
@@ -251,3 +249,4 @@ Amazon-fetch
   <script src="/admin/admin.js" defer></script>
 </body>
 </html>
+
