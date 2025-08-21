@@ -5,28 +5,27 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Grandma’s Kitchen</title>
 
-  <!-- RSS for daily picks -->
   <link rel="alternate" type="application/rss+xml"
         title="Grandma’s Kitchen • Daily Picks"
         href="/app/home-picks.rss" />
 
-  <!-- Site CSS -->
   <link rel="preload" href="/style.css" as="style" />
   <link rel="stylesheet" href="/style.css" />
-
   <style>
-    /* tiny skeletons while loading */
     .skeleton{background:linear-gradient(90deg,#eee 25%,#f5f5f5 37%,#eee 63%);background-size:400% 100%;animation:shimmer 1.2s infinite}
     @keyframes shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
     .skeleton.img{width:200px;height:200px;border-radius:12px;margin:0 auto 10px}
     .skeleton.text{height:16px;border-radius:8px;margin:6px 0}
+    /* chips + clamp for neat cards */
+    .chip{display:inline-block;padding:.25rem .5rem;border-radius:999px;background:#eef3ee;color:#2f5130;text-decoration:none;font-size:.8rem}
+    .line-2{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
   </style>
 </head>
 <body>
 
 <header class="container center">
   <a href="/index.html">
-    <img class="site-logo" src="/images/logo.jpg" alt="Grandma’s Kitchen Logo">
+    <img src="/images/logo.jpg" alt="Grandma’s Kitchen Logo" style="max-height:100px;margin-bottom:1rem;">
   </a>
   <nav aria-label="Primary">
     <a href="/index.html" aria-current="page">Home</a>
@@ -45,7 +44,6 @@
   <section class="container" aria-labelledby="daily-picks-title" style="margin-top:1rem">
     <h2 id="daily-picks-title">Today’s Picks</h2>
     <div id="homePicks" class="grid grid-2">
-      <!-- skeleton placeholders -->
       <article class="card"><div class="skeleton img"></div><div class="skeleton text" style="width:70%"></div></article>
       <article class="card"><div class="skeleton img"></div><div class="skeleton text" style="width:60%"></div></article>
     </div>
@@ -63,13 +61,6 @@
   if (!box) return;
 
   const esc = s => (s||'').replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m]));
-  const shortTitle = (s, max = 68) => {
-    s = (s || '').trim();
-    if (s.length <= max) return s;
-    const cut = s.slice(0, max - 1);
-    const space = cut.lastIndexOf(' ');
-    return (space > 32 ? cut.slice(0, space) : cut).trim() + '…';
-  };
 
   try {
     const r = await fetch('/app/home-picks.json', { cache: 'no-store' });
@@ -80,23 +71,23 @@
       return;
     }
 
-    box.innerHTML = items.map(p => {
-      const title = shortTitle(p.title || 'Product');
-      const cat = (p.category || '').trim();
-      const catHref = cat ? `/shop.html?cat=${encodeURIComponent(cat)}` : '';
-      return `
-        <article class="card" aria-labelledby="pick-${esc(p.product_num)}">
-          <a class="product-image" href="${esc(p.url)}">
-            ${p.image ? `<img loading="lazy" decoding="async" src="${esc(p.image)}" alt="${esc(title)}">` : ''}
-          </a>
-          <h3 id="pick-${esc(p.product_num)}" class="product-title">
-            <a href="${esc(p.url)}">${esc(title)}</a>
-          </h3>
-          ${cat ? `<p class="muted" style="margin:.25rem 0 .5rem"><a href="${esc(catHref)}">${esc(cat)}</a></p>` : ''}
-          <p><a class="btn" href="${esc(p.url)}">View product</a></p>
-        </article>
-      `;
-    }).join('');
+    box.innerHTML = items.map(p => `
+      <article class="card" aria-labelledby="pick-${esc(p.product_num)}">
+        <a class="product-image" href="${esc(p.url)}">
+          ${p.image ? `<img loading="lazy" decoding="async" src="${esc(p.image)}" alt="${esc(p.title || 'Product')}">` : ''}
+        </a>
+
+        <h3 id="pick-${esc(p.product_num)}" class="product-title line-2">
+          <a href="${esc(p.url)}">${esc(p.title || 'Product')}</a>
+        </h3>
+
+        ${p.category ? `<p class="muted" style="margin:.25rem 0 .5rem">
+            <a class="chip" href="/shop.html?category=${encodeURIComponent(p.category)}">${esc(p.category)}</a>
+          </p>` : ''}
+
+        <p><a class="btn" href="${esc(p.url)}">View product</a></p>
+      </article>
+    `).join('');
   } catch (err) {
     console.error('home-picks error:', err);
     box.innerHTML = `<p class="muted">Sorry, today’s picks are unavailable.</p>`;
