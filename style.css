@@ -186,3 +186,59 @@ footer{ padding:28px 0; color:#666; }
 
 /* Content flow helper */
 .flow > * + *{ margin-top:1.25rem; }
+
+/* === UI tune — typography & header sizing (2025-08-21) === */
+:root{
+  --logo-max: 130px;      /* header logo max-height */
+  --nav-size: 1.05rem;    /* slightly larger nav */
+  --card-title-size: 1.05rem;
+  --card-title-weight: 600;     /* lighter than bold */
+  --card-title-line: 1.35;
+}
+
+/* Header logo: use a class instead of inline styles */
+.site-logo{
+  max-height: var(--logo-max);
+  height: auto;
+  width: auto;
+  display: block;
+  margin: 0 auto 1rem;
+}
+
+/* Nav links a little larger with nicer spacing */
+header nav a{
+  font-size: var(--nav-size);
+  padding: 0 .75rem;
+  line-height: 1.6;
+}
+
+/* Product cards: lighten/trim titles and body text */
+.card .product-title,
+.card .product-title a{
+  font-size: var(--card-title-size);
+  font-weight: var(--card-title-weight);
+  line-height: var(--card-title-line);
+}
+
+.card p{
+  font-size: .95rem;      /* body copy a bit lighter */
+}
+
+/* Product detail page (title a bit less heavy) */
+.page-product h1,
+.product-detail h1{
+  font-weight: 700;       /* not extra-black */
+  line-height: 1.25;
+}
+
+/* Optional: buttons not so heavy */
+.btn{
+  font-weight: 600;
+}
+
+/* Small screens tweaks */
+@media (max-width: 520px){
+  :root{ --logo-max: 110px; }
+  header nav a{ font-size: 1rem; }
+}
+
