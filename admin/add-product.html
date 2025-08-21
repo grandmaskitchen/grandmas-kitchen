@@ -49,22 +49,14 @@
       <select id="shopCategory" name="shop_category_id" required>
         <option value="">— Choose a category —</option>
       </select>
-      <label for="shopCategory">Category *</label>
-      <select id="shopCategory" name="shop_category_id" required>
-      <option value="">— Choose a category —</option>
-      </select>
-
       <small class="hint">Pick the best fit. You can add more categories later.</small>
 
       <!-- Inline add-new -->
       <div class="row" style="margin-top:.35rem">
-      <input id="newCategoryName" type="text" placeholder="New category name (e.g. Water Filters)" />
-      <button id="btnAddCategory" type="button" title="Add new category">Add</button>
+        <input id="newCategoryName" type="text" placeholder="New category name (e.g. Water Filters)" />
+        <button id="btnAddCategory" type="button" title="Add new category">Add</button>
       </div>
-
       <small class="hint">Can’t see it? Add one here—this will be saved and selected.</small>
-
-      <small class="hint">Don’t see one? We can add a “Manage categories” screen later.</small>
 
       <label style="display:flex;gap:.5rem;align-items:center;">
         <input type="checkbox" id="approved" name="approved" value="true" />
@@ -82,7 +74,7 @@
 
       <div class="actions">
         <button type="submit">Submit</button>
-        <a class="secondary" href="/shop.html"><button type="button" class="secondary">Back to Pantry</button></a>
+        <a href="/shop.html"><button type="button" class="secondary">Back to Pantry</button></a>
       </div>
     </form>
 
@@ -186,25 +178,60 @@
     })();
   </script>
 
-  <!-- Load categories for the select -->
+  <!-- Categories: load list + add-new inline -->
   <script>
-    (async function loadCategories(){
-      const sel = document.getElementById('shopCategory');
-      if (!sel) return;
-      try {
-        const r = await fetch('/api/admin/categories-list');
+    async function loadCategoriesInto(selectEl){
+      try{
+        const r = await fetch('/api/admin/categories', { credentials: 'include' });
         const { items } = await r.json();
-        if (Array.isArray(items)) {
-          for (const c of items) {
+        const current = selectEl.value || '';
+        selectEl.innerHTML = '<option value="">— Choose a category —</option>';
+        if (Array.isArray(items)){
+          items.forEach(c=>{
             const opt = document.createElement('option');
             opt.value = c.id;
             opt.textContent = c.name;
-            sel.appendChild(opt);
-          }
+            selectEl.appendChild(opt);
+          });
         }
-      } catch (e) {
+        if (current) selectEl.value = current; // preserve selection if possible
+      }catch(e){
         console.error('Failed to load categories', e);
       }
+    }
+
+    async function addNewCategory(){
+      const input = document.getElementById('newCategoryName');
+      const name = (input.value || '').trim();
+      if (!name){ alert('Please enter a category name.'); return; }
+      const btn = document.getElementById('btnAddCategory');
+      btn.disabled = true;
+      try{
+        const r = await fetch('/api/admin/categories', {
+          method:'POST',
+          headers:{ 'Content-Type':'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ name })
+        });
+        const j = await r.json();
+        if (!r.ok || !j?.category?.id) throw new Error(j?.error || 'Create failed');
+
+        // refresh list and select new one
+        const sel = document.getElementById('shopCategory');
+        await loadCategoriesInto(sel);
+        sel.value = j.category.id;
+        input.value = '';
+      }catch(e){
+        alert('Could not add category: ' + (e.message || e));
+      }finally{
+        btn.disabled = false;
+      }
+    }
+
+    (async function initCategories(){
+      const sel = document.getElementById('shopCategory');
+      await loadCategoriesInto(sel);
+      document.getElementById('btnAddCategory')?.addEventListener('click', addNewCategory);
     })();
   </script>
 
