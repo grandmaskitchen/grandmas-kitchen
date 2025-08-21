@@ -11,12 +11,13 @@
     h1{font-size:1.6rem;margin:0 0 1rem}
     form{display:grid;gap:12px;background:#fff;padding:16px;border-radius:10px;box-shadow:0 2px 8px rgba(0,0,0,.06)}
     label{font-weight:600}
-    input,textarea{width:100%;box-sizing:border-box;padding:.6rem;border:1px solid #cfcfcf;border-radius:8px;font-size:1rem}
+    input,textarea,select{width:100%;box-sizing:border-box;padding:.6rem;border:1px solid #cfcfcf;border-radius:8px;font-size:1rem;background:#fff}
     .row{display:grid;grid-template-columns:1fr auto;gap:12px}
     .actions{display:flex;gap:12px;align-items:center;margin-top:.5rem}
     .hint{font-size:.85rem;color:#666}
     button{background:#44633F;color:#fff;border:0;border-radius:8px;padding:.7rem 1rem;cursor:pointer}
     button.secondary{background:#ddd;color:#222}
+    a.btnlike{display:inline-block;background:#ddd;color:#222;text-decoration:none;border-radius:8px;padding:.7rem 1rem}
     #fetchStatus{font-size:.9rem;color:#666}
     #preview{display:none;background:#fff7ea;border:1px solid #eee;border-radius:10px;padding:12px}
   </style>
@@ -44,7 +45,14 @@
       <label for="my_description_short">Short Description</label>
       <textarea id="my_description_short" name="my_description_short" rows="2"></textarea>
 
-      <label style="display:flex;gap:.5rem;align-items:center;">
+      <!-- NEW: Category (required) -->
+      <label for="shopCategory">Category *</label>
+      <select id="shopCategory" name="shop_category_id" required>
+        <option value="">— Choose a category —</option>
+      </select>
+      <small class="hint">Pick the best fit. You can add more categories later.</small>
+
+      <label style="display:flex;gap:.5rem;align-items:center;margin-top:.25rem;">
         <input type="checkbox" id="approved" name="approved" value="true" />
         Approved
       </label>
@@ -60,7 +68,7 @@
 
       <div class="actions">
         <button type="submit">Submit</button>
-        <a class="secondary" href="/shop.html"><button type="button" class="secondary">Back to Pantry</button></a>
+        <a class="btnlike" href="/shop.html">Back to Pantry</a>
       </div>
     </form>
 
@@ -147,30 +155,42 @@
           if (short && !short.value && s.amazon_desc) short.value = s.amazon_desc.slice(0, 240);
 
           // Normalize link & derive product_num (ASIN)
-          if (s.affiliate_link) {
-            byName('affiliate_link').value = s.affiliate_link;
-          }
+          if (s.affiliate_link) byName('affiliate_link').value = s.affiliate_link;
+
           const asin = extractASIN(byName('affiliate_link').value) || extractASIN(input);
           if (asin) byName('product_num').value = asin.toLowerCase();
 
-          statusEl.textContent = 'Filled from Amazon. Review fields, then Submit.';
+          statusEl.textContent = 'Filled from Amazon. Review fields, choose a category, then Submit.';
         } catch (err) {
           alert('Fetch failed: ' + err.message);
           statusEl.textContent = 'Fetch failed.';
         } finally {
           btn.disabled = false;
         }
-        <label for="shopCategory">Category *</label>
-        <select id="shopCategory" name="shop_category_id" required>
-        <option value="">— Choose a category —</option>
-        </select>
-        <small class="muted">Don’t see one? We can add a “Manage categories” screen later.</small>
       }
       btn?.addEventListener('click', doFetch);
+
+      // Load categories for the <select>
+      (async function loadCategories(){
+        const sel = document.getElementById('shopCategory');
+        try {
+          const r = await fetch('/api/admin/categories', { credentials: 'include' });
+          const { items } = await r.json();
+          (items || []).forEach(c => {
+            const opt = document.createElement('option');
+            opt.value = c.id;
+            opt.textContent = c.name;
+            sel.appendChild(opt);
+          });
+        } catch (e) {
+          console.error('Load categories failed', e);
+          // keep the select with just the placeholder; submission will fail if left empty
+        }
+      })();
     })();
   </script>
 
-  <!-- Single include: handles validation + POST to /api/admin/product-upsert -->
+  <!-- Handles validation + POST to /api/admin/product-upsert -->
   <script src="/admin/admin.js" defer></script>
 </body>
 </html>
