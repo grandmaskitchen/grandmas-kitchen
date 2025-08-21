@@ -9,11 +9,16 @@ function log(title, obj) {
     `\n\n=== ${title} ===\n` +
     (typeof obj === 'string' ? obj : JSON.stringify(obj, null, 2));
   if (debugBox) debugBox.textContent += line;
-  console.log(title, obj);
+  try { console.log(title, obj); } catch {}
 }
 
-async function fetchJSON(url, opts) {
-  const r = await fetch(url, opts);
+async function fetchJSON(url, opts = {}) {
+  // default: include auth cookies; avoid caches for admin calls
+  const r = await fetch(url, {
+    credentials: 'include',
+    cache: 'no-store',
+    ...opts,
+  });
   const text = await r.text();
   let json;
   try { json = JSON.parse(text); } catch { json = { raw: text }; }
@@ -23,21 +28,39 @@ async function fetchJSON(url, opts) {
 // ---------- whoami banner ----------
 (async () => {
   try {
-    const r = await fetch('/api/admin/whoami');
+    const r = await fetch('/api/admin/whoami', {
+      credentials: 'include',
+      cache: 'no-store',
+    });
     const { user } = await r.json();
     const el = $('#whoami');
     if (el && user) el.textContent = `You are logged in as ${user}`;
   } catch (_) {}
 })();
 
-$('#btnRefreshPicks')?.addEventListener('click', async () => {
-  const r = await fetch('/api/admin/home-picks-refresh', { method: 'POST' });
-  const j = await r.json().catch(() => ({}));
-  if (!r.ok) {
-    alert(`❌ Refresh failed (${r.status})\n${j.error || ''}`);
+// ---------- Home Picks: refresh 6 random ----------
+$('#btnRefreshPicks')?.addEventListener('click', async (e) => {
+  const btn = e.currentTarget;
+  const label = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = 'Refreshing…';
+
+  const { ok, status, json } = await fetchJSON('/api/admin/home-picks-refresh', {
+    method: 'POST',
+  });
+  log('home-picks-refresh', { ok, status, json });
+
+  const out = $('#picksOut');
+  if (ok) {
+    alert(`✅ Home picks updated (${json.inserted ?? 0} items).`);
+    if (out) out.innerHTML = `<small>Inserted: ${json.inserted ?? 0}</small>`;
   } else {
-    alert(`✅ Inserted: ${j.inserted ?? 0}`);
+    alert(`❌ Refresh failed (${status})${json?.error ? `\n${json.error}` : ''}`);
+    if (out) out.innerHTML = `<small>Error: ${status}</small>`;
   }
+
+  btn.disabled = false;
+  btn.textContent = label;
 });
 
 // ---------- diagnostics ----------
@@ -66,14 +89,27 @@ $('#btnStats')?.addEventListener('click', async () => {
     : `<small>Stats error: ${status}</small>`;
 });
 
-// ---------- backups ----------
+// ---------- backups (download JSON) ----------
 document.querySelectorAll('.btnBackup').forEach(btn => {
   btn.addEventListener('click', async () => {
     const table = btn.dataset.table;
     const file = `${table}-${new Date().toISOString().slice(0,10).replace(/-/g,'')}.json`;
-    const r = await fetch(`/api/admin/backup?table=${encodeURIComponent(table)}`);
+
+    const r = await fetch(`/api/admin/backup?table=${encodeURIComponent(table)}`, {
+      credentials: 'include',
+      cache: 'no-store',
+    });
+
+    if (!r.ok) {
+      let msg = '';
+      try { const j = await r.json(); msg = j?.error || ''; } catch {}
+      alert(`Backup failed (${r.status})${msg ? `\n${msg}` : ''}`);
+      log('backup failed', { table, status: r.status, msg });
+      return;
+    }
+
     const blob = await r.blob();
-    log('backup', { table, status: r.status, size: blob.size });
+    log('backup ok', { table, status: r.status, size: blob.size });
 
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
@@ -81,27 +117,4 @@ document.querySelectorAll('.btnBackup').forEach(btn => {
     a.click();
     URL.revokeObjectURL(a.href);
   });
-});
-
-// ---------- Home Picks: refresh 6 random (the only handler) ----------
-$('#refreshHomePicks')?.addEventListener('click', async (e) => {
-  const btn = e.currentTarget;
-  const label = btn.textContent;
-  btn.disabled = true;
-  btn.textContent = 'Refreshing…';
-
-  const { ok, status, json } = await fetchJSON('/api/admin/picks-refresh', { method: 'POST' });
-  log('picks-refresh', { ok, status, json });
-
-  const out = $('#picksOut');
-  if (ok) {
-    alert(`✅ Home picks updated (${json.inserted ?? 0} items).`);
-    if (out) out.innerHTML = `<small>Inserted: ${json.inserted ?? 0}</small>`;
-  } else {
-    alert(`❌ Refresh failed (${status})`);
-    if (out) out.innerHTML = `<small>Error: ${status}</small>`;
-  }
-
-  btn.disabled = false;
-  btn.textContent = label;
 });
