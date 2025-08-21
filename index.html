@@ -13,6 +13,7 @@
   <!-- Site CSS -->
   <link rel="preload" href="/style.css" as="style" />
   <link rel="stylesheet" href="/style.css" />
+
   <style>
     /* tiny skeletons while loading */
     .skeleton{background:linear-gradient(90deg,#eee 25%,#f5f5f5 37%,#eee 63%);background-size:400% 100%;animation:shimmer 1.2s infinite}
@@ -25,7 +26,7 @@
 
 <header class="container center">
   <a href="/index.html">
-    <img src="/images/logo.jpg" alt="Grandma’s Kitchen Logo" style="max-height:100px;margin-bottom:1rem;">
+    <img class="site-logo" src="/images/logo.jpg" alt="Grandma’s Kitchen Logo">
   </a>
   <nav aria-label="Primary">
     <a href="/index.html" aria-current="page">Home</a>
@@ -62,6 +63,13 @@
   if (!box) return;
 
   const esc = s => (s||'').replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m]));
+  const shortTitle = (s, max = 68) => {
+    s = (s || '').trim();
+    if (s.length <= max) return s;
+    const cut = s.slice(0, max - 1);
+    const space = cut.lastIndexOf(' ');
+    return (space > 32 ? cut.slice(0, space) : cut).trim() + '…';
+  };
 
   try {
     const r = await fetch('/app/home-picks.json', { cache: 'no-store' });
@@ -72,18 +80,23 @@
       return;
     }
 
-    box.innerHTML = items.map(p => `
-      <article class="card" aria-labelledby="pick-${esc(p.product_num)}">
-        <a class="product-image" href="${esc(p.url)}">
-          ${p.image ? `<img loading="lazy" decoding="async" src="${esc(p.image)}" alt="${esc(p.title || 'Product')}">` : ''}
-        </a>
-        <h3 id="pick-${esc(p.product_num)}" class="product-title">
-          <a href="${esc(p.url)}">${esc(p.title || 'Product')}</a>
-        </h3>
-        ${p.blurb ? `<p class="muted">${esc(p.blurb)}</p>` : ''}
-        <p><a class="btn" href="${esc(p.url)}">View product</a></p>
-      </article>
-    `).join('');
+    box.innerHTML = items.map(p => {
+      const title = shortTitle(p.title || 'Product');
+      const cat = (p.category || '').trim();
+      const catHref = cat ? `/shop.html?cat=${encodeURIComponent(cat)}` : '';
+      return `
+        <article class="card" aria-labelledby="pick-${esc(p.product_num)}">
+          <a class="product-image" href="${esc(p.url)}">
+            ${p.image ? `<img loading="lazy" decoding="async" src="${esc(p.image)}" alt="${esc(title)}">` : ''}
+          </a>
+          <h3 id="pick-${esc(p.product_num)}" class="product-title">
+            <a href="${esc(p.url)}">${esc(title)}</a>
+          </h3>
+          ${cat ? `<p class="muted" style="margin:.25rem 0 .5rem"><a href="${esc(catHref)}">${esc(cat)}</a></p>` : ''}
+          <p><a class="btn" href="${esc(p.url)}">View product</a></p>
+        </article>
+      `;
+    }).join('');
   } catch (err) {
     console.error('home-picks error:', err);
     box.innerHTML = `<p class="muted">Sorry, today’s picks are unavailable.</p>`;
