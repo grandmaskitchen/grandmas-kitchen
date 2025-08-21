@@ -1,6 +1,6 @@
 // /functions/app/home-picks.json.js
 // GET /app/home-picks.json
-// Returns 6 daily picks straight from approved products (no shop_products needed)
+// Returns 6 daily picks straight from approved products (no shop_products needed).
 
 export const onRequestGet = async ({ request, env }) => {
   try {
@@ -10,7 +10,7 @@ export const onRequestGet = async ({ request, env }) => {
       return json({ error: "Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY" }, 500);
     }
 
-    // Figure out your public site URL for product links
+    // Build your public site URL for product links (works on preview + prod)
     const reqUrl = new URL(request.url);
     const site = env.SITE_BASE_URL || `${reqUrl.protocol}//${reqUrl.host}`;
 
@@ -24,8 +24,9 @@ export const onRequestGet = async ({ request, env }) => {
         "amazon_title",
         "my_description_short",
         "image_main",
+        "amazon_category",
         "approved",
-        "created_at"
+        "created_at",
       ].join(",")
     );
     sb.searchParams.set("approved", "eq.true");
@@ -35,8 +36,8 @@ export const onRequestGet = async ({ request, env }) => {
     const r = await fetch(sb.toString(), {
       headers: {
         apikey: key,
-        Authorization: `Bearer ${key}`
-      }
+        Authorization: `Bearer ${key}`,
+      },
     });
 
     if (!r.ok) {
@@ -49,19 +50,20 @@ export const onRequestGet = async ({ request, env }) => {
     // 2) Basic sanity filter (must have a product_num)
     const pool = (rows || []).filter(p => p && p.product_num);
 
-    // 3) Deterministic “shuffle” by day so today is stable
+    // 3) Deterministic shuffle by day so today is stable
     const day = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
     const shuffled = [...pool].sort(
       (a, b) => hash(a.product_num + day) - hash(b.product_num + day)
     );
 
-    // 4) Take 6 and map to the shape your homepage expects
+    // 4) Take 6 and shape for the homepage
     const items = shuffled.slice(0, 6).map(p => ({
       product_num: p.product_num,
       title: p.my_title || p.amazon_title || "Product",
       blurb: p.my_description_short || "",
       image: p.image_main || "",
-      url: `${site}/products/${encodeURIComponent(p.product_num)}`
+      category: p.amazon_category || null,                          // ← for the category link
+      url: `${site}/products/${encodeURIComponent(p.product_num)}`, // product detail page
     }));
 
     return new Response(JSON.stringify({ items }), {
@@ -69,8 +71,8 @@ export const onRequestGet = async ({ request, env }) => {
       headers: {
         "Content-Type": "application/json",
         // short cache; rotates daily anyway
-        "Cache-Control": "public, max-age=60, s-maxage=60"
-      }
+        "Cache-Control": "public, max-age=60, s-maxage=60",
+      },
     });
   } catch (err) {
     return json({ error: err?.message || "Server error" }, 500);
@@ -80,11 +82,11 @@ export const onRequestGet = async ({ request, env }) => {
 function json(obj, status = 200) {
   return new Response(JSON.stringify(obj), {
     status,
-    headers: { "Content-Type": "application/json" }
+    headers: { "Content-Type": "application/json" },
   });
 }
 
-// small deterministic hash (fast & good enough for shuffling)
+// Small deterministic hash (fast & good enough for shuffling)
 function hash(str) {
   let h = 2166136261;               // FNV-1a seed
   for (let i = 0; i < str.length; i++) {
