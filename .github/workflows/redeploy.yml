@@ -1,4 +1,4 @@
-*filename: .github/workflows/redeploy.yml
+
 name: "Force Cloudflare Pages Redeploy"
 
 on:
