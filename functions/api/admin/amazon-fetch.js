@@ -1,73 +1,52 @@
-// functions/api/admin/amazon-fetch.ts
 // Admin: Fetch basic product details from an Amazon URL or ASIN.
-// POST /api/admin/amazon-fetch -> { scraped: { ... }, source }
+// POST /api/admin/amazon-fetch   -> { scraped:{...}, warning? }
 
-export const onRequestOptions = ({ request }: { request: Request }) =>
+export const onRequestOptions = ({ request }) =>
   new Response(null, { status: 204, headers: corsHeaders(request) });
 
-export const onRequestPost = async ({
-  request,
-  env,
-}: {
-  request: Request;
-  env: Record<string, string>;
-}) => {
-  // Optional defense-in-depth (global middleware should already protect /admin/*)
-  const auth = requireBasicAuthIfConfigured(request, env);
-  if (auth instanceof Response) return auth;
-
+export const onRequestPost = async ({ request, env }) => {
   try {
     const { input } = await request.json();
     if (!input || !String(input).trim()) {
       return jerr("input is required", 400, request);
     }
 
-    // 1) Normalize to a canonical Amazon product URL
-    const { url, asin, source } = await normalizeAmazonInput(String(input));
+    // Resolve short links / pull ASIN
+    const base = await normalizeAmazonInput(input);
+    let url = base.url;
+    let asin = base.asin || extractASIN(url);
 
-    // 2) Fetch the product page (best-effort)
-    const res = await fetch(url, {
-      redirect: "follow",
-      cf: { cacheTtl: 0, cacheEverything: false },
-      headers: {
-        // Reasonable headers to avoid bot challenges where possible
-        "User-Agent":
-          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36",
-        "Accept-Language": "en-GB,en;q=0.9",
-        Accept:
-          "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
-      },
-    });
+    // First attempt: desktop page
+    let { ok, html, finalUrl } = await fetchHtml(url, DESKTOP_UA);
+    let blocked = !ok || isBlocked(html);
 
-    const html = await res.text();
+    // Fallback: mobile page (far fewer bot checks)
+    if (blocked && asin) {
+      const mUrl = `https://m.amazon.co.uk/dp/${asin}`;
+      const try2 = await fetchHtml(mUrl, MOBILE_UA);
+      if (try2.ok && !isBlocked(try2.html)) {
+        ok = true;
+        html = try2.html;
+        finalUrl = try2.finalUrl;
+        blocked = false;
+      }
+    }
 
-    // 3) If blocked/challenged, return minimal payload so caller can still proceed
-    if (
-      !res.ok ||
-      !html ||
-      /captcha|robot\s*check|enter the characters you see/i.test(html)
-    ) {
+    // If still blocked, return minimal but usable payload
+    if (blocked) {
       return jok(
-        {
-          scraped: minimalFrom(url, asin),
-          warning:
-            "Could not fully parse product page (blocked or unexpected HTML).",
-          source,
-        },
+        { scraped: minimalFrom(base.url, asin), warning: "Amazon blocked scraping; filled only ASIN/link." },
         request
       );
     }
 
-    // 4) Best-effort scraping
+    // Scrape
     const scraped = {
-      affiliate_link: url,
+      affiliate_link: finalUrl || base.url,
       amazon_title:
         pickMeta(html, /property=["']og:title["']|name=["']og:title["']/i) ||
-        textBetween(
-          html,
-          /<span[^>]+id=["']productTitle["'][^>]*>/i,
-          /<\/span>/i
-        ) ||
+        textBetween(html, /<span[^>]+id=["']productTitle["'][^>]*>/i, /<\/span>/i) ||
+        textBetween(html, /<span[^>]+id=["']title["'][^>]*>/i, /<\/span>/i) ||
         pickTitleTag(html) ||
         "",
       amazon_desc:
@@ -75,162 +54,114 @@ export const onRequestPost = async ({
         pickMeta(html, /property=["']og:description["']/i) ||
         "",
       image_main:
-        pickMeta(
-          html,
-          /property=["']og:image["']|name=["']og:image["']/i
-        ) ||
+        pickMeta(html, /property=["']og:image["']|name=["']og:image["']/i) ||
         firstImageCandidate(html) ||
         guessImageFromDataHtml(html) ||
         "",
-      image_extra_1: null as string | null,
-      image_extra_2: null as string | null,
+      image_extra_1: null,
+      image_extra_2: null,
       amazon_category:
         pickMeta(html, /property=["']og:site_name["']/i) ||
         guessCategoryFromBreadcrumb(html) ||
         null,
-      asin: asin || extractASIN(url),
     };
 
-    // 5) Tidy fields
-    scraped.amazon_title = clamp(clean(scraped.amazon_title), 300);
-    scraped.amazon_desc = clamp(clean(scraped.amazon_desc), 800);
+    scraped.amazon_title = clean(scraped.amazon_title).slice(0, 300);
+    scraped.amazon_desc  = clean(scraped.amazon_desc).slice(0, 800);
 
-    return jok({ scraped, source }, request);
-  } catch (err: any) {
+    // Always return success with whatever we got
+    return jok({ scraped }, request);
+  } catch (err) {
     return jerr(err?.message || "Server error", 500, request);
   }
 };
 
-/* ---------------- helpers ---------------- */
+/* ---------------- fetch & parse helpers ---------------- */
 
-function corsHeaders(request: Request) {
+const DESKTOP_UA =
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36";
+const MOBILE_UA =
+  "Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1";
+
+async function fetchHtml(url, ua) {
+  const r = await fetch(url, {
+    redirect: "follow",
+    cf: { cacheTtl: 0, cacheEverything: false },
+    headers: {
+      "User-Agent": ua,
+      "Accept-Language": "en-GB,en;q=0.9",
+      Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    },
+  });
+  const html = await r.text();
+  return { ok: r.ok, html, finalUrl: r.url || url };
+}
+
+function isBlocked(html = "") {
+  return /captcha|enter the characters|robot check|automated access|sorry/i.test(html);
+}
+
+/* ---------------- response helpers ---------------- */
+
+function corsHeaders(request) {
   const origin = request.headers.get("Origin") || "*";
   return {
     "Access-Control-Allow-Origin": origin,
-    "Vary": "Origin",
     "Access-Control-Allow-Credentials": "true",
     "Access-Control-Allow-Methods": "POST, OPTIONS",
     "Access-Control-Allow-Headers":
       "Content-Type, Authorization, Cf-Access-Jwt-Assertion",
     "Cache-Control": "no-store",
-    "Content-Security-Policy": "default-src 'none'",
   };
 }
-
-function jok(obj: unknown, request: Request) {
+function jok(obj, request) {
   return new Response(JSON.stringify(obj), {
     status: 200,
     headers: { "Content-Type": "application/json", ...corsHeaders(request) },
   });
 }
-
-function jerr(error: string, status: number, request: Request) {
+function jerr(error, status, request) {
   return new Response(JSON.stringify({ error }), {
     status,
     headers: { "Content-Type": "application/json", ...corsHeaders(request) },
   });
 }
 
-/**
- * Optional Basic Auth on this function.
- * Uses WORKSHOP_USER / WORKSHOP_PASS if set.
- * Returns Response (401) when challenge is required, or null if authorized / not enforced.
- */
-function requireBasicAuthIfConfigured(
-  request: Request,
-  env: Record<string, string>
-): Response | null {
-  const user = env.WORKSHOP_USER;
-  const pass = env.WORKSHOP_PASS;
-  if (!user || !pass) return null; // not enforced
+/* ---------------- normalization ---------------- */
 
-  const realm = env.WORKSHOP_REALM || "Workshop Admin";
-  const challenge = () =>
-    new Response("Unauthorized", {
-      status: 401,
-      headers: { "WWW-Authenticate": `Basic realm="${realm}"` },
-    });
-
-  const header = request.headers.get("Authorization") || "";
-  if (!header.startsWith("Basic ")) return challenge();
-
-  let decoded = "";
-  try {
-    decoded = atob(header.slice(6));
-  } catch {
-    return challenge();
-  }
-
-  const idx = decoded.indexOf(":");
-  const u = idx === -1 ? decoded : decoded.slice(0, idx);
-  const p = idx === -1 ? "" : decoded.slice(idx + 1);
-  if (u !== user || p !== pass) return challenge();
-
-  return null;
-}
-
-/* ---------- input normalization ---------- */
-
-async function normalizeAmazonInput(raw: string): Promise<{
-  asin: string | null;
-  url: string;
-  source: "asin" | "amzn.to" | "amazon" | "string" | "unknown";
-}> {
+async function normalizeAmazonInput(raw) {
   const s = String(raw).trim();
 
-  // Bare ASIN (10 alphanumeric)
+  // Bare ASIN
   const mAsin = s.match(/^[A-Z0-9]{10}$/i);
   if (mAsin) {
     const asin = mAsin[0].toUpperCase();
-    return { asin, url: `https://www.amazon.co.uk/dp/${asin}`, source: "asin" };
+    return { asin, url: `https://www.amazon.co.uk/dp/${asin}` };
   }
 
-  // Try parse as URL; if it fails, fall back to extracting ASIN from text
-  let u: URL | null = null;
+  // URL
   try {
-    u = new URL(s);
-  } catch {
-    const asin2 = extractASIN(s);
-    return {
-      asin: asin2,
-      url: asin2 ? `https://www.amazon.co.uk/dp/${asin2}` : s,
-      source: "string",
-    };
-  }
+    const u = new URL(s);
+    // amzn.to -> follow (short link)
+    if (/^amzn\.to$/i.test(u.hostname)) {
+      const head = await fetch(u.toString(), { redirect: "follow" });
+      const finalURL = head.url || u.toString();
+      const asin = extractASIN(finalURL);
+      return { asin, url: asin ? `https://www.amazon.co.uk/dp/${asin}` : finalURL };
+    }
+    // any amazon.* URL
+    if (/amazon\./i.test(u.hostname)) {
+      const asin = extractASIN(u.toString());
+      return { asin, url: asin ? `https://www.amazon.co.uk/dp/${asin}` : u.toString() };
+    }
+  } catch {}
 
-  // amzn.to shortener -> follow redirects to final URL, then canonicalize
-  if (/^amzn\.to$/i.test(u.hostname)) {
-    // Use GET + follow; .url should be final
-    const hop = await fetch(u.toString(), { redirect: "follow" });
-    const finalURL = hop.url || u.toString();
-    const asin = extractASIN(finalURL);
-    return {
-      asin,
-      url: asin ? `https://www.amazon.co.uk/dp/${asin}` : finalURL,
-      source: "amzn.to",
-    };
-  }
-
-  // Any amazon.* URL -> canonicalize to /dp/ASIN when possible
-  if (/amazon\./i.test(u.hostname)) {
-    const asin = extractASIN(u.toString());
-    return {
-      asin,
-      url: asin ? `https://www.amazon.co.uk/dp/${asin}` : u.toString(),
-      source: "amazon",
-    };
-  }
-
-  // Unknown -> echo back or canonicalize if ASIN is discoverable
-  const fallbackAsin = extractASIN(s);
-  return {
-    asin: fallbackAsin,
-    url: fallbackAsin ? `https://www.amazon.co.uk/dp/${fallbackAsin}` : s,
-    source: "unknown",
-  };
+  // Unknown string, last-ditch ASIN pull
+  const asin = extractASIN(s);
+  return { asin, url: asin ? `https://www.amazon.co.uk/dp/${asin}` : s };
 }
 
-function extractASIN(s: string | null | undefined): string | null {
+function extractASIN(s) {
   if (!s) return null;
   const str = String(s);
   const m =
@@ -240,10 +171,9 @@ function extractASIN(s: string | null | undefined): string | null {
   return m ? m[1].toUpperCase() : null;
 }
 
-/* ---------- scraping primitives ---------- */
+/* ---------------- scraping primitives ---------------- */
 
-function pickMeta(html: string, attrRegex: RegExp): string {
-  // Finds <meta ... content="..."> where the tag matches attrRegex
+function pickMeta(html, attrRegex) {
   const re = new RegExp(
     `<meta[^>]+(?:${attrRegex.source})[^>]+content=["']([^"']+)["'][^>]*>`,
     "i"
@@ -251,57 +181,40 @@ function pickMeta(html: string, attrRegex: RegExp): string {
   const m = html.match(re);
   return m ? decodeEntities(m[1]) : "";
 }
-
-function pickTitleTag(html: string): string {
+function textBetween(html, startRe, endRe) {
+  const i = html.search(startRe);
+  if (i === -1) return "";
+  const slice = html.slice(i);
+  const j = slice.search(endRe);
+  const inner = j === -1 ? slice : slice.slice(0, j);
+  return decodeEntities(stripTags(inner));
+}
+function pickTitleTag(html) {
   const m = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
   return m ? decodeEntities(stripTags(m[1])) : "";
 }
-
-function textBetween(
-  html: string,
-  startRe: RegExp,
-  endRe: RegExp
-): string {
-  const start = html.search(startRe);
-  if (start === -1) return "";
-  const slice = html.slice(start);
-  const end = slice.search(endRe);
-  const inner = end === -1 ? slice : slice.slice(0, end);
-  return decodeEntities(stripTags(inner));
-}
-
-function firstImageCandidate(html: string): string {
-  // Common main image container
+function firstImageCandidate(html) {
   const m = html.match(
     /<img[^>]+id=["']landingImage["'][^>]+data-old-hires=["']([^"']+)["'][^>]*>/i
   );
   if (m) return decodeEntities(m[1]);
-
-  // Fallback: any product image CDN match
   const m2 = html.match(/https:\/\/m\.media-amazon\.com\/images\/[^"'<>\s]+/i);
   return m2 ? decodeEntities(m2[0]) : "";
 }
-
-function guessImageFromDataHtml(html: string): string {
+function guessImageFromDataHtml(html) {
   const m = html.match(/"hiRes"\s*:\s*"([^"]+)"/i);
   return m ? decodeEntities(m[1]) : "";
 }
-
-function guessCategoryFromBreadcrumb(html: string): string | null {
-  // Amazon often has a breadcrumb list; grab the last/first match's text
+function guessCategoryFromBreadcrumb(html) {
   const m =
-    html.match(
-      /<a[^>]+class=["'][^"']*breadcrumb[^"']*["'][^>]*>([\s\S]*?)<\/a>/i
-    ) ||
-    html.match(
-      /<li[^>]+class=["'][^"']*breadcrumb[^"']*["'][^>]*>([\s\S]*?)<\/li>/i
-    );
+    html.match(/<a[^>]+class=["'][^"']*breadcrumb[^"']*["'][^>]*>([\s\S]*?)<\/a>/i) ||
+    html.match(/<li[^>]+class=["'][^"']*breadcrumb[^"']*["'][^>]*>([\s\S]*?)<\/li>/i);
   return m ? clean(stripTags(m[1])) : null;
 }
 
-/* ---------- tiny utils ---------- */
+/* ---------------- tiny utils ---------------- */
 
-function decodeEntities(s: string): string {
+function decodeEntities(s) {
   return String(s)
     .replace(/&amp;/g, "&")
     .replace(/&lt;/g, "<")
@@ -309,28 +222,18 @@ function decodeEntities(s: string): string {
     .replace(/&quot;/g, '"')
     .replace(/&#39;/g, "'");
 }
+function stripTags(s) { return String(s).replace(/<[^>]*>/g, " "); }
+function clean(s) { return String(s).replace(/\s+/g, " ").trim(); }
 
-function stripTags(s: string): string {
-  return String(s).replace(/<[^>]*>/g, " ");
-}
-
-function clean(s: string): string {
-  return String(s).replace(/\s+/g, " ").trim();
-}
-
-function clamp(s: string, max: number): string {
-  return s.length > max ? s.slice(0, max) : s;
-}
-
-function minimalFrom(url: string, asin?: string | null) {
+function minimalFrom(url, asin) {
   return {
     affiliate_link: url,
     amazon_title: "",
     amazon_desc: "",
     image_main: "",
-    image_extra_1: null as string | null,
-    image_extra_2: null as string | null,
-    amazon_category: null as string | null,
+    image_extra_1: null,
+    image_extra_2: null,
+    amazon_category: null,
     asin: asin || extractASIN(url),
   };
 }
