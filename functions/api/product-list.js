@@ -1,3 +1,4 @@
+/* ---- functions/api/products-list.js ---- */
 // /functions/api/products-list.js
 // GET /api/products-list
 // Unified listing with optional ?approved=true|false and ?q=searchterm&limit=NN
