@@ -1,3 +1,4 @@
+/* ---- admin/workshop.js ---- */
 // /admin/workshop.js — full file
 
 // ---------- tiny helpers ----------
