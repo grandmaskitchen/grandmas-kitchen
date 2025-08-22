@@ -40,6 +40,20 @@
       </div>
       <div id="diagOut" style="margin-top:10px"></div>
     </section>
+    
+    <!-- Test Fetch (Amazon URL/ASIN) -->
+<section class="card">
+  <h3>Test fetch</h3>
+  <form id="testFetchForm" class="row" style="margin:0 0 .5rem 0; grid-template-columns:1fr auto; gap:.5rem;">
+    <input id="testFetchInput" type="text"
+           placeholder="Paste Amazon URL or ASIN (e.g. B07XYZ1234)" />
+    <button id="btnTestFetch" type="submit" class="btn">Run</button>
+  </form>
+
+  <div id="testFetchOut" class="muted" style="min-height:60px">
+    <small>Try a full amazon.co.uk URL, an amzn.to short link, or a raw ASIN.</small>
+  </div>
+</section>
 
     <section class="card">
       <h2>Backups (download JSON)</h2>
