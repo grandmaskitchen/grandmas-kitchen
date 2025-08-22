@@ -1,3 +1,4 @@
+/* ---- functions/api/diag.js ---- */
 // functions/api/diag.js
 
 export async function onRequestGet({ env }) {
