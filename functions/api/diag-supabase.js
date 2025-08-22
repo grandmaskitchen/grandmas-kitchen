@@ -1,3 +1,4 @@
+/* ---- functions/api/diag-supabase.js ---- */
 export const onRequestGet = async ({ env }) => {
   const out = {
     urlOk: !!env.SUPABASE_URL,
