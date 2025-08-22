@@ -1,3 +1,4 @@
+/* ---- functions/api/home-picks.js ---- */
 // GET /api/home-picks
 // Returns today's picks from shop_products for the home page.
 
