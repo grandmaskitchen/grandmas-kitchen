@@ -196,7 +196,7 @@ testForm?.addEventListener('submit', async (e) => {
     </details>
 
     <div style="margin-top:.5rem">
-      <a class="btn small" href="/admin/add-product.html" target="_blank" rel="noopener">Open “Add Product”</a>
+      <a class="btn small" href="/admin/add-product.html?link=${encodeURIComponent(input)}" target="_blank" rel="noopener">Open “Add Product”</a>
     </div>
   `;
 });
