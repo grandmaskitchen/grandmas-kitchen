@@ -1,4 +1,4 @@
-/* ---- Theme tokens ---- */
+/* ---- .github/workflows/deploy.yml ---- */
 name: Deploy to Cloudflare Pages
 
 on:
