@@ -1,3 +1,4 @@
+*File name: .github/workflows/deploy.yml 
 name: Deploy to Cloudflare Pages
 
 on:
