@@ -1,3 +1,4 @@
+/* ---- functions/api/shop-list.js ---- */
 export const onRequestGet = async ({ request, env }) => {
   try {
     const url = new URL(request.url);
