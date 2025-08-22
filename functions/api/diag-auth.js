@@ -1,3 +1,4 @@
+/* ---- functions/api/diag-auth.js ---- */
 // GET /api/diag-auth
 // Simple diag: shows whether WORKSHOP_* env vars exist and whether an Authorization header was received.
 
