@@ -18,7 +18,11 @@
     button{background:#44633F;color:#fff;border:0;border-radius:8px;padding:.7rem 1rem;cursor:pointer}
     button.secondary{background:#ddd;color:#222}
     #fetchStatus{font-size:.9rem;color:#666}
-    #preview{display:none;background:#fff7ea;border:1px solid #eee;border-radius:10px;padding:12px}
+    #preview{background:#fff;border:1px solid #eee;border-radius:10px;padding:12px;margin-top:16px}
+    #preview .muted{color:#666}
+    #preview img{max-width:120px;border:1px solid #eee;border-radius:8px;background:#fff}
+    summary{cursor:pointer}
+    .chip{display:inline-block;padding:.15rem .5rem;border-radius:999px;background:#eef3ee;color:#2f5130;font-size:.8rem}
   </style>
 </head>
 <body>
@@ -32,7 +36,7 @@
         <input id="affiliate_link" name="affiliate_link" type="text" placeholder="https://amzn.to/... or https://www.amazon.co.uk/... or ASIN" required />
         <button id="fetchAmazon" type="button" title="Fetch details from Amazon">Fetch</button>
       </div>
-      <span id="fetchStatus" class="hint"></span>
+      <span id="fetchStatus" class="hint">Filled from Amazon. Review fields, then Submit.</span>
 
       <!-- Minimal authoring fields -->
       <label for="my_title">My Title *</label>
@@ -78,15 +82,20 @@
       </div>
     </form>
 
-    <div id="preview" class="wrap"></div>
+    <!-- Integrated Test Fetch / Preview -->
+    <section id="preview" aria-live="polite">
+      <div class="muted"><small>Preview (from Fetch) shows what we pulled from Amazon.</small></div>
+      <div id="testFetchOut" style="margin-top:.5rem"></div>
+    </section>
   </div>
 
-  <!-- Amazon fetch wiring ONLY (submission handled in /admin/admin.js) -->
+  <!-- Amazon fetch wiring + integrated preview -->
   <script>
     (function () {
       const btn = document.getElementById('fetchAmazon');
       const statusEl = document.getElementById('fetchStatus');
-      const byName = (n) => document.querySelector(`[name="${n}"]`);
+      const previewEl = document.getElementById('testFetchOut');
+      const byName = (n) => document.querySelector(\`[name="\${n}"]\`);
 
       const FIELDS_TO_CLEAR = [
         'amazon_title','amazon_desc','image_main','image_small',
@@ -100,16 +109,41 @@
         });
       }
 
+      function esc(s){ return String(s||'').replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m])); }
       function extractASIN(s) {
         try {
           if (/^[A-Z0-9]{10}$/i.test((s||'').trim())) return s.trim().toUpperCase();
-          const u = new URL(s);
+          const u = new URL(s, 'https://x.invalid');
           const m =
-            u.pathname.match(/\/dp\/([A-Z0-9]{10})/i) ||
-            u.pathname.match(/\/gp\/product\/([A-Z0-9]{10})/i) ||
+            u.pathname.match(/\\/dp\\/([A-Z0-9]{10})/i) ||
+            u.pathname.match(/\\/gp\\/product\\/([A-Z0-9]{10})/i) ||
             u.search.match(/[?&]asin=([A-Z0-9]{10})/i);
           return (m && m[1] && m[1].toUpperCase()) || '';
         } catch { return ''; }
+      }
+
+      function renderPreview(scraped, input){
+        const s = scraped || {};
+        const asin = extractASIN(s.affiliate_link || input);
+        const image = s.image_main || s.image_small || '';
+        const title = s.amazon_title || '';
+        const cat   = s.amazon_category || '';
+
+        previewEl.innerHTML = \`
+          <div style="display:grid;grid-template-columns:120px 1fr;gap:12px;align-items:start">
+            <div>\${image ? \`<img src="\${esc(image)}" alt="">\` : '<div class="muted"><small>No image</small></div>'}</div>
+            <div>
+              <div><b>Title:</b> \${esc(title || '—')}</div>
+              <div><b>ASIN:</b> <code>\${esc(asin || '—')}</code></div>
+              <div><b>Category:</b> \${cat ? \`<span class="chip">\${esc(cat)}</span>\` : '—'}</div>
+              <div><b>Image URL:</b> \${image ? \`<a href="\${esc(image)}" target="_blank" rel="noopener">open</a>\` : '—'}</div>
+              <div><b>Affiliate Link:</b> \${s.affiliate_link ? \`<a href="\${esc(s.affiliate_link)}" target="_blank" rel="noopener">open</a>\` : esc(input)}</div>
+            </div>
+          </div>
+          <details style="margin-top:.5rem">
+            <summary>Raw JSON</summary>
+            <pre style="white-space:pre-wrap;background:#fff;border:1px solid #eee;border-radius:8px;padding:8px;margin-top:.5rem">\${esc(JSON.stringify(s, null, 2))}</pre>
+          </details>\`;
       }
 
       async function doFetch() {
@@ -123,6 +157,7 @@
         }
 
         clearAutoFields();
+        previewEl.innerHTML = '<small class="muted">Fetching…</small>';
         statusEl.textContent = 'Fetching product details…';
         btn.disabled = true;
         try {
@@ -144,7 +179,7 @@
             if (el && !el.value) el.value = val;
           };
 
-          // Populate fields
+          // Populate form fields
           setIfEmpty('amazon_title', s.amazon_title);
           setIfEmpty('amazon_desc',  s.amazon_desc);
           setIfEmpty('image_main',   s.image_main);
@@ -165,16 +200,32 @@
           const asin = extractASIN(byName('affiliate_link').value) || extractASIN(input);
           if (asin) byName('product_num').value = asin.toLowerCase();
 
+          // Render the integrated preview
+          renderPreview(s, input);
+
           statusEl.textContent = 'Filled from Amazon. Review fields, then Submit.';
         } catch (err) {
           alert('Fetch failed: ' + err.message);
           statusEl.textContent = 'Fetch failed.';
+          previewEl.innerHTML = '<small style="color:#a00">Fetch failed.</small>';
         } finally {
           btn.disabled = false;
         }
       }
 
       btn?.addEventListener('click', doFetch);
+
+      // --- Auto-prefill via query param & auto-fetch ---
+      (function autoPrefill(){
+        const params = new URLSearchParams(location.search);
+        const preset =
+          params.get('link') || params.get('url') || params.get('asin') || params.get('q');
+        if (preset) {
+          document.getElementById('affiliate_link').value = preset;
+          // Auto-run fetch so the form fills itself
+          doFetch();
+        }
+      })();
     })();
   </script>
 
