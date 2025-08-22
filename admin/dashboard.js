@@ -1,3 +1,4 @@
+/* ---- admin/dashboard.js ---- */
 // Admin • Approve Products (table view) — with inline category editing
 
 const $ = (s) => document.querySelector(s);
