@@ -1,3 +1,4 @@
+/* ---- admin/admin.js ---- */
 // /admin/admin.js
 // Minimal client: validate, normalize, debug (optional), and POST to our Pages Function.
 
