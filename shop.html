@@ -12,6 +12,11 @@
     .skeleton.text{height:16px;border-radius:8px;margin:6px 0}
     .chip{display:inline-block;padding:.25rem .5rem;border-radius:999px;background:#eef3ee;color:#2f5130;text-decoration:none;font-size:.8rem}
     .line-2{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+    /* admin-only */
+    article.card{position:relative}
+    .admin-archive{position:absolute;top:6px;right:6px;background:#b33;color:#fff;border:0;border-radius:8px;padding:4px 8px;cursor:pointer;font-size:.9rem;box-shadow:0 1px 4px rgba(0,0,0,.15)}
+    article.card.broken{outline:2px dashed #b33}
+    .broken img{opacity:.6}
   </style>
 </head>
 <body>
@@ -37,7 +42,6 @@
 
   <div class="container">
     <div id="grid" class="grid grid-2">
-      <!-- skeletons -->
       <article class="card"><div class="skeleton img"></div><div class="skeleton text" style="width:60%"></div><div class="skeleton text" style="width:90%"></div></article>
       <article class="card"><div class="skeleton img"></div><div class="skeleton text" style="width:70%"></div><div class="skeleton text" style="width:85%"></div></article>
     </div>
@@ -55,7 +59,7 @@
   const catNote = document.getElementById('catNote');
   const esc = s => (s||'').replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m]));
   const qs = new URLSearchParams(location.search);
-  const cat = (qs.get('cat') || '').trim();    // <-- single param: ?cat=
+  const cat = (qs.get('cat') || '').trim();
 
   if (cat) {
     catNote.innerHTML = `Filtering by category: <a class="chip" href="/shop.html?cat=${encodeURIComponent(cat)}">${esc(cat)}</a> &nbsp; <a href="/shop.html" class="muted">(clear)</a>`;
@@ -96,107 +100,43 @@
         </article>
       `;
     }).join('');
+
+    // Admin overlay (archive) only with ?admin=1
+    if (qs.get('admin') === '1') {
+      const wait = (ms)=>new Promise(r=>setTimeout(r,ms));
+      for (let i=0;i<20;i++){ await wait(50); if (document.querySelector('#grid article')) break; }
+      document.querySelectorAll('#grid article.card').forEach(card => {
+        const a = card.querySelector('a.product-image');
+        const href = a?.getAttribute('href') || '';
+        const slug = decodeURIComponent(href.split('/').pop() || '');
+        if (!slug) return;
+
+        const img = card.querySelector('.product-image img');
+        if (img) img.addEventListener('error', ()=>card.classList.add('broken'), { once:true });
+
+        const btn = document.createElement('button');
+        btn.className = 'admin-archive';
+        btn.textContent = 'Archive';
+        btn.title = `Hide this product (${slug}) from site`;
+        btn.addEventListener('click', async () => {
+          if (!confirm(`Archive product ${slug}?`)) return;
+          const r = await fetch(`/api/admin/products/${encodeURIComponent(slug)}/archive`, {
+            method:'POST', credentials:'include',
+            headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({ reason: 'archived from shop overlay' })
+          });
+          const j = await r.json();
+          if (!r.ok) { alert(j?.error || 'Archive failed'); return; }
+          card.remove();
+        });
+        card.appendChild(btn);
+      });
+    }
   } catch (err) {
     console.error(err);
     grid.innerHTML = `<p class="muted">Sorry, the shop is unavailable right now.</p>`;
   }
 })();
 </script>
-  <script>
-(async function adminOverlay(){
-  const admin = new URLSearchParams(location.search).get('admin') === '1';
-  if (!admin) return;
-
-  // After the grid has been rendered by your existing code, add delete buttons
-  const wait = (ms)=>new Promise(r=>setTimeout(r,ms));
-  for (let i=0;i<20;i++){ // wait up to ~2s for grid population
-    await wait(100);
-    if ([...document.querySelectorAll('#grid article')].length) break;
-  }
-
-  document.querySelectorAll('#grid article').forEach(card => {
-    const link = card.querySelector('a[href^="/products/"]');
-    if (!link) return;
-    const slug = decodeURIComponent(link.getAttribute('href').split('/').pop());
-    const btn = document.createElement('button');
-    btn.textContent = '🗑';
-    btn.title = `Delete ${slug}`;
-    btn.style.cssText = 'position:absolute;top:6px;right:6px;background:#b33;color:#fff;border:0;border-radius:6px;padding:4px 6px;cursor:pointer';
-    btn.addEventListener('click', async () => {
-      if (!confirm(`Delete product ${slug}?`)) return;
-      const r = await fetch(`/api/admin/products/${encodeURIComponent(slug)}`, { method:'DELETE', credentials:'include' });
-      const j = await r.json();
-      if (!r.ok) return alert(j?.error||'Delete failed');
-      card.remove();
-    });
-    card.style.position = 'relative';
-    card.appendChild(btn);
-  });
-})();
-    <style>
-  /* admin-only affordances */
-  article.card { position: relative; }
-  .admin-archive {
-    position:absolute; top:6px; right:6px;
-    background:#b33; color:#fff; border:0; border-radius:8px;
-    padding:4px 8px; cursor:pointer; font-size:.9rem;
-    box-shadow:0 1px 4px rgba(0,0,0,.15);
-  }
-  .broken img { opacity:.6; }
-  article.card.broken { outline: 2px dashed #b33; }
-</style>
-<script>
-(async function adminOverlay(){
-  // Only show when explicitly requested (and you're authenticated behind Access).
-  const admin = new URLSearchParams(location.search).get('admin') === '1';
-  if (!admin) return;
-
-  // Wait for grid to populate (your existing JS does this async)
-  const wait = ms => new Promise(r => setTimeout(r, ms));
-  for (let i=0;i<30;i++){ await wait(100); if (document.querySelector('#grid article')) break; }
-
-  function getSlugFromCard(card){
-    const a = card.querySelector('a.product-image');
-    if (!a) return null;
-    const href = a.getAttribute('href') || '';
-    return decodeURIComponent(href.split('/').pop() || '');
-  }
-
-  // Add archive button to each card
-  document.querySelectorAll('#grid article.card').forEach(card => {
-    const slug = getSlugFromCard(card);
-    if (!slug) return;
-
-    // Mark card broken if image fails
-    const img = card.querySelector('.product-image img');
-    if (img) {
-      img.addEventListener('error', () => {
-        card.classList.add('broken');
-      }, { once:true });
-    }
-
-    const btn = document.createElement('button');
-    btn.className = 'admin-archive';
-    btn.textContent = 'Archive';
-    btn.title = `Hide this product (${slug}) from site`;
-    btn.addEventListener('click', async () => {
-      if (!confirm(`Archive product ${slug} now?\n(It will be hidden from Shop & Home Picks but can be restored later.)`)) return;
-      const r = await fetch(`/api/admin/products/${encodeURIComponent(slug)}/archive`, {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type':'application/json' },
-        body: JSON.stringify({ reason: 'archived from shop overlay' })
-      });
-      const j = await r.json();
-      if (!r.ok) { alert(j?.error || 'Archive failed'); return; }
-      card.remove();
-    });
-    card.appendChild(btn);
-  });
-})();
-</script>
-
-</script>
-
 </body>
 </html>
