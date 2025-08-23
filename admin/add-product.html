@@ -1,4 +1,3 @@
-//* ---- admin/add-product.html ---- *//
 <!doctype html>
 <html lang="en">
 <head>
@@ -240,41 +239,42 @@
     }
   }
 
-  // Button + optional auto-prefill via ?prefill= / ?input= / ?asin= / ?url=
+  // Button + optional auto-prefill via ?prefill= / ?input= / ?asin= / ?url= / ?link=
   btn?.addEventListener('click', doFetch);
 
-// --- Auto-prefill when linked from Workshop/Test fetch --------------------
-try {
-  const p = new URLSearchParams(location.search);
-  const prefill = (
-    p.get('prefill') ||    // new preferred key
-    p.get('input')  ||    // legacy
-    p.get('link')   ||    // <-- your Workshop likely uses this
-    p.get('asin')   ||
-    p.get('url')    ||
-    ''
-  ).trim();
+  // --- Auto-prefill when linked from Workshop/Test fetch --------------------
+  try {
+    const p = new URLSearchParams(location.search);
+    const prefill = (
+      p.get('prefill') ||
+      p.get('input')  ||
+      p.get('link')   ||   // Workshop support
+      p.get('asin')   ||
+      p.get('url')    ||
+      ''
+    ).trim();
 
-  if (prefill) {
-    const inputEl = document.getElementById('affiliate_link');
-    if (inputEl && !inputEl.value) inputEl.value = prefill;
-    console.debug('[add-product] auto-prefill param found:', prefill);
-    await doFetch();                                   // run same logic as the button
-    history.replaceState(null, '', location.pathname); // clean URL so refreshes don't refetch
-  } else {
-    // Safety: if the field is already populated (SSR or previous step), auto-run once
-    const existing = document.getElementById('affiliate_link')?.value?.trim();
-    if (existing) {
-      console.debug('[add-product] auto-run via existing affiliate_link value');
-      await doFetch();
-      history.replaceState(null, '', location.pathname);
+    if (prefill) {
+      const inputEl = document.getElementById('affiliate_link');
+      if (inputEl && !inputEl.value) inputEl.value = prefill;
+      console.debug('[add-product] auto-prefill param found:', prefill);
+      await doFetch();                                   // run same logic as the button
+      history.replaceState(null, '', location.pathname); // clean URL so refreshes don't refetch
+    } else {
+      // Safety: if the field is already populated (SSR or previous step), auto-run once
+      const existing = document.getElementById('affiliate_link')?.value?.trim();
+      if (existing) {
+        console.debug('[add-product] auto-run via existing affiliate_link value');
+        await doFetch();
+        history.replaceState(null, '', location.pathname);
+      }
     }
+  } catch (e) {
+    console.warn('[add-product] auto-prefill skipped:', e);
   }
-} catch (e) {
-  console.warn('[add-product] auto-prefill skipped:', e);
-}
-
+})();  /* <-- this was missing */
 </script>
+
   <!-- Categories: load list + add-new inline -->
   <script>
     async function loadCategoriesInto(selectEl){
