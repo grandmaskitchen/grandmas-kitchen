@@ -1,57 +1,82 @@
-// GET /api/admin/products?approved=true|false|all&search=chia&limit=50&offset=0&order=created_at.desc
+// /functions/api/admin/products.js
+// GET /api/admin/products?state=active|archived|all&q=teeth&limit=50
+// Returns: { items: [...] }
 
 export const onRequestGet = async ({ request, env }) => {
   try {
-    const url = new URL(request.url);
-    const approved = url.searchParams.get("approved") ?? "all"; // "true"|"false"|"all"
-    const search = (url.searchParams.get("search") || "").trim();
-    const limit = Number(url.searchParams.get("limit") || 50);
-    const offset = Number(url.searchParams.get("offset") || 0);
-    const order = url.searchParams.get("order") || "created_at.desc";
+    const url   = new URL(request.url);
+    const q     = (url.searchParams.get("q") || "").trim();
+    const state = (url.searchParams.get("state") || "active").toLowerCase();
+    const limit = Math.min(parseInt(url.searchParams.get("limit") || "50", 10), 200);
 
-    const qs = new URLSearchParams();
-    qs.set("select", "*");
-    qs.set("limit", String(Math.max(1, Math.min(limit, 200))));
-    if (offset > 0) qs.set("offset", String(offset));
+    const u = new URL(`${env.SUPABASE_URL}/rest/v1/products`);
+    u.searchParams.set(
+      "select",
+      [
+        "product_num",
+        "my_title",
+        "amazon_title",
+        "amazon_category",
+        "image_main",
+        "updated_at",
+        "archived_at",
+      ].join(",")
+    );
+    u.searchParams.set("order", "updated_at.desc,created_at.desc");
+    u.searchParams.set("limit", String(limit));
 
-    // order
-    if (order) {
-      const [col, dir] = order.split(".");
-      qs.set("order", `${col}.${dir === "asc" ? "asc" : "desc"}`);
+    // Active/Archived/All
+    if (state === "active") u.searchParams.set("archived_at", "is.null");
+    else if (state === "archived") u.searchParams.set("archived_at", "not.is.null");
+
+    if (q) {
+      const term = `*${q}*`;
+      u.searchParams.set(
+        "or",
+        [
+          `my_title.ilike.${term}`,
+          `amazon_title.ilike.${term}`,
+          `product_num.ilike.${term}`,
+          `amazon_category.ilike.${term}`,
+        ].join(",")
+      );
     }
 
-    // filter approved
-    if (approved === "true") qs.set("approved", "eq.true");
-    if (approved === "false") qs.set("approved", "eq.false");
-
-    // simple OR search across title fields
-    if (search) {
-      const term = `*${search.replace(/\s+/g, "%")}*`;
-      qs.set("or", `(my_title.ilike.${term},amazon_title.ilike.${term})`);
-    }
-
-    const resp = await fetch(`${env.SUPABASE_URL}/rest/v1/products?${qs.toString()}`, {
+    const r = await fetch(u.toString(), {
       headers: {
         apikey: env.SUPABASE_SERVICE_ROLE_KEY,
         Authorization: `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}`,
-        Prefer: "count=exact"
-      }
+        Prefer: "count=exact",
+      },
     });
+    const rows = await r.json();
+    if (!r.ok) return json({ error: rows?.message || "Supabase error", details: rows }, 500, request);
 
-    const data = await resp.json();
-    const countHdr = resp.headers.get("content-range"); // e.g. "0-9/123"
-    const total = countHdr ? Number(countHdr.split("/")[1]) : (Array.isArray(data) ? data.length : 0);
-
-    if (!resp.ok) return json({ error: data?.message || "Fetch failed", details: data }, 400);
-    return json({ ok: true, total, products: Array.isArray(data) ? data : [] });
-  } catch (err) {
-    return json({ error: err?.message || "Server error" }, 500);
+    return json({ items: Array.isArray(rows) ? rows : [] }, 200, request);
+  } catch (e) {
+    return json({ error: e?.message || "Server error" }, 500, request);
   }
 };
 
-function json(obj, status = 200) {
+export const onRequestOptions = ({ request }) =>
+  new Response(null, {
+    status: 204,
+    headers: {
+      "Access-Control-Allow-Origin": request.headers.get("Origin") || "*",
+      "Access-Control-Allow-Methods": "GET, OPTIONS",
+      "Access-Control-Allow-Headers":
+        "Content-Type, Cf-Access-Jwt-Assertion, Cf-Access-Authenticated-User-Email",
+    },
+  });
+
+function json(obj, status = 200, request) {
   return new Response(JSON.stringify(obj), {
     status,
-    headers: { "Content-Type": "application/json" }
+    headers: {
+      "Content-Type": "application/json",
+      "Cache-Control": "no-store",
+      "Access-Control-Allow-Origin": request?.headers?.get?.("Origin") || "*",
+      "Access-Control-Allow-Credentials": "true",
+    },
   });
 }
