@@ -1,14 +1,11 @@
 /* ---- admin/workshop.js ---- */
-console.log('workshop.js build v2025-08-23-1');
 
 // ---------- tiny helpers ----------
 const $ = (sel) => document.querySelector(sel);
 const debugBox = $('#debugBox');
 
 function log(title, obj) {
-  const line =
-    `\n\n=== ${title} ===\n` +
-    (typeof obj === 'string' ? obj : JSON.stringify(obj, null, 2));
+  const line = `\n\n=== ${title} ===\n` + (typeof obj === 'string' ? obj : JSON.stringify(obj, null, 2));
   if (debugBox) debugBox.textContent += line;
   try { console.log(title, obj); } catch {}
 }
@@ -47,14 +44,16 @@ function extractASIN(s) {
   } catch (_) {}
 })();
 
-// ---------- Home Picks ----------
+// ---------- Home Picks: refresh 6 random ----------
 $('#btnRefreshPicks')?.addEventListener('click', async (e) => {
   const btn = e.currentTarget;
   const label = btn.textContent;
-  btn.disabled = true; btn.textContent = 'Refreshing…';
+  btn.disabled = true;
+  btn.textContent = 'Refreshing…';
 
   const { ok, status, json } = await fetchJSON('/api/admin/home-picks-refresh', { method: 'POST' });
   log('home-picks-refresh', { ok, status, json });
+
   const out = $('#picksOut');
   if (ok) {
     alert(`✅ Home picks updated (${json.inserted ?? 0} items).`);
@@ -64,60 +63,132 @@ $('#btnRefreshPicks')?.addEventListener('click', async (e) => {
     if (out) out.innerHTML = `<small>Error: ${status}</small>`;
   }
 
-  btn.disabled = false; btn.textContent = label;
+  btn.disabled = false;
+  btn.textContent = label;
 });
 
 // ---------- diagnostics ----------
 $('#btnDiagProducts')?.addEventListener('click', async () => {
   const { ok, status, json } = await fetchJSON('/api/diag?table=products');
   log('diag products', { ok, status, json });
-  const el = $('#diagOut'); if (el) el.innerHTML = `<small>Status: ${status}</small>`;
+  const el = $('#diagOut');
+  if (el) el.innerHTML = `<small>Status: ${status}</small>`;
 });
+
 $('#btnDiagShop')?.addEventListener('click', async () => {
   const { ok, status, json } = await fetchJSON('/api/diag?table=shop_products');
   log('diag shop_products', { ok, status, json });
-  const el = $('#diagOut'); if (el) el.innerHTML = `<small>Status: ${status}</small>`;
+  const el = $('#diagOut');
+  if (el) el.innerHTML = `<small>Status: ${status}</small>`;
 });
+
 $('#btnStats')?.addEventListener('click', async () => {
   const { ok, status, json } = await fetchJSON('/api/admin/stats');
   log('stats', { ok, status, json });
   const el = $('#diagOut');
-  if (el) el.innerHTML = ok
+  if (!el) return;
+  el.innerHTML = ok
     ? `<small>products: ${json.products?.count ?? 0}, shop_products: ${json.shop_products?.count ?? 0}, env: ${json.envOk ? 'OK' : 'MISSING'}</small>`
     : `<small>Stats error: ${status}</small>`;
 });
 
-// ---------- backups ----------
+// ---------- backups (download JSON) ----------
 document.querySelectorAll('.btnBackup').forEach(btn => {
   btn.addEventListener('click', async () => {
     const table = btn.dataset.table;
     const file = `${table}-${new Date().toISOString().slice(0,10).replace(/-/g,'')}.json`;
 
     const r = await fetch(`/api/admin/backup?table=${encodeURIComponent(table)}`, {
-      credentials: 'include', cache: 'no-store',
+      credentials: 'include',
+      cache: 'no-store',
     });
+
     if (!r.ok) {
-      let msg = ''; try { const j = await r.json(); msg = j?.error || ''; } catch {}
+      let msg = '';
+      try { const j = await r.json(); msg = j?.error || ''; } catch {}
       alert(`Backup failed (${r.status})${msg ? `\n${msg}` : ''}`);
-      log('backup failed', { table, status: r.status, msg }); return;
+      log('backup failed', { table, status: r.status, msg });
+      return;
     }
+
     const blob = await r.blob();
     log('backup ok', { table, status: r.status, size: blob.size });
-    const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
-    a.download = file; a.click(); URL.revokeObjectURL(a.href);
+
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = file;
+    a.click();
+    URL.revokeObjectURL(a.href);
   });
 });
 
-// ---------- Test fetch card ----------
+// ---------- Category Manager ----------
+(async function renderCategoryManager(){
+  const box = document.getElementById('catMgr');
+  if (!box) return;
+
+  async function load() {
+    box.innerHTML = '<small>Loading…</small>';
+    const r = await fetch('/api/admin/categories', { credentials:'include', cache:'no-store' });
+    const j = await r.json();
+    if (!r.ok) { box.innerHTML = `<small style="color:#a00">${j?.error||'Error'}</small>`; return; }
+    const items = Array.isArray(j.items)? j.items : [];
+    box.innerHTML = items.map(c => `
+      <div class="row" style="align-items:center;gap:8px;margin:.3rem 0" data-id="${c.id}">
+        <input class="rename input" value="${c.name.replace(/"/g,'&quot;')}" style="flex:1">
+        <button class="save">Rename</button>
+        <select class="reassign input" style="max-width:220px"><option value="">— Reassign to… —</option>
+          ${items.filter(x=>x.id!==c.id).map(x=>`<option value="${x.id}">${x.name}</option>`).join('')}
+        </select>
+        <button class="del btn-danger">Delete</button>
+      </div>
+    `).join('');
+  }
+  await load();
+
+  box.addEventListener('click', async (e) => {
+    const row = e.target.closest('[data-id]'); if (!row) return;
+    const id = row.dataset.id;
+
+    if (e.target.classList.contains('save')) {
+      const name = row.querySelector('.rename').value.trim();
+      if (!name) return alert('Name required');
+      const r = await fetch(`/api/admin/categories/${encodeURIComponent(id)}`, {
+        method:'PATCH',
+        credentials:'include',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ name })
+      });
+      const j = await r.json();
+      if (!r.ok) return alert(j?.error||'Rename failed');
+      await load();
+    }
+
+    if (e.target.classList.contains('del')) {
+      const to = row.querySelector('.reassign').value || '';
+      if (!confirm(`Delete this category${to?` (reassign products first)`:''}?`)) return;
+      const url = new URL(`/api/admin/categories/${encodeURIComponent(id)}`, location.origin);
+      if (to) url.searchParams.set('reassign_to', to);
+      const r = await fetch(url.toString(), { method:'DELETE', credentials:'include' });
+      const j = await r.json();
+      if (!r.ok) return alert(j?.error||'Delete failed');
+      await load();
+    }
+  });
+})();
+
+// ---------- Test Fetch ----------
 const testForm = $('#testFetchForm');
 const testInput = $('#testFetchInput');
 const testOut = $('#testFetchOut');
+
 testForm?.addEventListener('submit', async (e) => {
   e.preventDefault();
   const input = (testInput?.value || '').trim();
   if (!input) { alert('Paste an Amazon URL or a 10-char ASIN'); return; }
 
   testOut.innerHTML = '<small>Fetching…</small>';
+
   const { ok, status, json, text } = await fetchJSON('/api/admin/amazon-fetch', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -151,118 +222,105 @@ testForm?.addEventListener('submit', async (e) => {
         <div><b>Image URL:</b> ${image ? `<a href="${esc(image)}" target="_blank" rel="noopener">open</a>` : '—'}</div>
         <div><b>Affiliate Link:</b> ${s.affiliate_link ? `<a href="${esc(s.affiliate_link)}" target="_blank" rel="noopener">open</a>` : esc(input)}</div>
       </div>
-    </div>`;
-  // Keep the “Open Add Product” link in the HTML page; we only set its href here.
-  const addLink = $('#openAddProduct');
-  if (addLink) addLink.href = '/admin/add-product.html?prefill=' + encodeURIComponent(input);
+    </div>
+  `;
 });
 
-// ---------- Category Manager ----------
-(async function renderCategoryManager(){
-  const box = document.getElementById('catMgr');
-  if (!box) return;
+// ---------- Products: Search + Archive/Delete ----------
+(function productManager(){
+  const rows = $('#prodRows');
+  const input = $('#prodSearch');
+  const btn = $('#btnProdSearch');
 
-  async function load() {
-    box.innerHTML = '<small>Loading…</small>';
-    const r = await fetch('/api/admin/categories', { credentials:'include', cache:'no-store' });
-    const j = await r.json();
-    if (!r.ok) { box.innerHTML = `<small style="color:#a00">${j?.error||'Error'}</small>`; return; }
-    const items = Array.isArray(j.items)? j.items : [];
-    if (!items.length) { box.innerHTML = '<small>No categories yet.</small>'; return; }
-    box.innerHTML = items.map(c => `
-      <div class="row" style="align-items:center;gap:8px;margin:.3rem 0" data-id="${c.id}">
-        <input class="rename" value="${c.name.replace(/"/g,'&quot;')}" style="flex:1">
-        <button class="save">Rename</button>
-        <select class="reassign"><option value="">— Reassign to… —</option>
-          ${items.filter(x=>x.id!==c.id).map(x=>`<option value="${x.id}">${esc(x.name)}</option>`).join('')}
-        </select>
-        <button class="del" style="background:#b33">Delete</button>
-      </div>
-    `).join('');
+  function archScope(){
+    const v = (document.querySelector('input[name="archScope"]:checked')?.value)||'active';
+    if (v==='active')  return '0';
+    if (v==='archived')return '1';
+    return 'all';
   }
-  await load();
 
-  box.addEventListener('click', async (e) => {
-    const row = e.target.closest('[data-id]'); if (!row) return;
-    const id = row.dataset.id;
+  async function runSearch(){
+    const q = (input.value||'').trim();
+    rows.innerHTML = `<tr><td colspan="5" class="muted"><small>Searching…</small></td></tr>`;
+    const url = new URL('/api/admin/products', location.origin);
+    if (q) url.searchParams.set('q', q);
+    const a = archScope();
+    if (a !== 'all') url.searchParams.set('archived', a); // 0 or 1
+    url.searchParams.set('limit','200');
 
-    if (e.target.classList.contains('save')) {
-      const name = row.querySelector('.rename').value.trim();
-      if (!name) return alert('Name required');
-      const r = await fetch(`/api/admin/categories/${encodeURIComponent(id)}`, {
-        method:'PATCH', credentials:'include',
+    const { ok, json } = await fetchJSON(url.toString());
+    if (!ok) { rows.innerHTML = `<tr><td colspan="5" style="color:#a00">Error loading</td></tr>`; return; }
+
+    const items = Array.isArray(json.items) ? json.items : (Array.isArray(json.products) ? json.products : []);
+    if (!items.length) { rows.innerHTML = `<tr><td colspan="5" class="muted">No results.</td></tr>`; return; }
+
+    rows.innerHTML = items.map(p => {
+      const title = p.my_title || p.amazon_title || 'Product';
+      const when = p.updated_at || p.created_at || '';
+      const tag  = p.archived_at ? `<span class="pill tag-arch">archived</span>` : '';
+      return `
+        <tr data-pn="${esc(p.product_num)}">
+          <td style="display:flex;align-items:center;gap:8px;">
+            ${p.image_main ? `<img class="thumb" src="${esc(p.image_main)}" alt="">` : `<div class="thumb" style="display:flex;align-items:center;justify-content:center;color:#999">—</div>`}
+            <div>
+              <div style="font-weight:600;max-width:480px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(title)} ${tag}</div>
+              ${p.amazon_title && p.my_title && p.my_title!==p.amazon_title ? `<div class="muted" style="max-width:480px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(p.amazon_title)}</div>`:''}
+            </div>
+          </td>
+          <td>${esc(p.amazon_category || '')}</td>
+          <td><code>${esc(p.product_num || '')}</code></td>
+          <td><small class="muted">${esc(when).replace('T',' ').replace('Z','')}</small></td>
+          <td>
+            ${p.archived_at
+              ? `<button class="btn-restore">Restore</button>`
+              : `<button class="btn-archive btn-warn">Archive</button>`}
+            <button class="btn-delete btn-danger">Delete</button>
+          </td>
+        </tr>
+      `;
+    }).join('');
+  }
+
+  btn?.addEventListener('click', runSearch);
+  input?.addEventListener('keydown', e => { if (e.key==='Enter') { e.preventDefault(); runSearch(); } });
+  document.querySelectorAll('input[name="archScope"]').forEach(r => r.addEventListener('change', runSearch));
+
+  rows?.addEventListener('click', async (e) => {
+    const tr = e.target.closest('tr[data-pn]'); if (!tr) return;
+    const pn = tr.dataset.pn;
+
+    if (e.target.classList.contains('btn-archive')) {
+      if (!confirm(`Archive ${pn}? It will be hidden but recoverable.`)) return;
+      const { ok, json } = await fetchJSON(`/api/admin/products/${encodeURIComponent(pn)}/archive`, {
+        method:'POST',
         headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({ name })
+        body: JSON.stringify({ reason:'workshop archive' })
       });
-      const j = await r.json();
-      if (!r.ok) return alert(j?.error||'Rename failed');
-      alert('Renamed ✔'); await load();
+      if (!ok) return alert(json?.error||'Archive failed');
+      tr.querySelector('.btn-archive')?.remove();
+      tr.querySelector('td:nth-child(1) div').innerHTML += ' <span class="pill tag-arch">archived</span>';
+      const td = tr.querySelector('td:last-child');
+      td.insertAdjacentHTML('afterbegin','<button class="btn-restore">Restore</button> ');
     }
 
-    if (e.target.classList.contains('del')) {
-      const to = row.querySelector('.reassign').value || '';
-      if (!confirm(`Delete this category${to?` (reassign products first)`:''}?`)) return;
-      const url = new URL(`/api/admin/categories/${encodeURIComponent(id)}`, location.origin);
-      if (to) url.searchParams.set('reassign_to', to);
-      const r = await fetch(url.toString(), { method:'DELETE', credentials:'include' });
-      const j = await r.json();
-      if (!r.ok) return alert(j?.error||'Delete failed');
-      alert('Deleted ✔'); await load();
+    if (e.target.classList.contains('btn-restore')) {
+      if (!confirm(`Restore ${pn}?`)) return;
+      const { ok, json } = await fetchJSON(`/api/admin/products/${encodeURIComponent(pn)}/archive`, {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ restore:1 })
+      });
+      if (!ok) return alert(json?.error||'Restore failed');
+      // re-run search to refresh view
+      await runSearch();
     }
-  });
-})();
 
-// ---------- Product quick-delete ----------
-document.getElementById('btnDelProd')?.addEventListener('click', async () => {
-  const pn = (document.getElementById('delProdNum')?.value || '').trim().toLowerCase();
-  if (!pn) return alert('Enter product_num');
-  if (!confirm(`Delete product ${pn}?`)) return;
-  const r = await fetch(`/api/admin/products/${encodeURIComponent(pn)}`, {
-    method:'DELETE', credentials:'include'
-  });
-  const j = await r.json();
-  if (!r.ok) return alert(j?.error||'Delete failed');
-  alert('Deleted ✔');
-});
-
-// ---------- Archived (restore) ----------
-(async function archivedManager(){
-  const box = document.getElementById('archivedBox');
-  if (!box) return;
-
-  async function load() {
-    const r = await fetch('/api/admin/products/list?archived=1&limit=200', {
-      credentials:'include', cache:'no-store'
-    });
-    const j = await r.json();
-    if (!r.ok) { box.innerHTML = `<small style="color:#a00">${j?.error||'Error loading'}</small>`; return; }
-    const items = Array.isArray(j.items) ? j.items : [];
-    if (!items.length) { box.innerHTML = `<small>Nothing archived.</small>`; return; }
-
-    box.innerHTML = items.map(p => `
-      <div class="row" style="gap:8px;align-items:center;margin:.3rem 0" data-pn="${p.product_num}">
-        <img src="${(p.image_main||'').replace(/"/g,'&quot;')}" alt="" style="width:48px;height:48px;object-fit:cover;border-radius:6px;border:1px solid #eee">
-        <div style="flex:1;min-width:0">
-          <div style="font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${(p.my_title||p.amazon_title||'').replace(/</g,'&lt;')}</div>
-          <div class="muted"><code>${p.product_num}</code>${p.amazon_category?` • ${p.amazon_category}`:''}</div>
-        </div>
-        <button class="btn-restore">Restore</button>
-      </div>
-    `).join('');
-  }
-  await load();
-
-  box.addEventListener('click', async (e) => {
-    if (!e.target.classList.contains('btn-restore')) return;
-    const row = e.target.closest('[data-pn]'); if (!row) return;
-    const pn = row.dataset.pn;
-    const r = await fetch(`/api/admin/products/${encodeURIComponent(pn)}/archive`, {
-      method:'POST', credentials:'include',
-      headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ restore: 1 })
-    });
-    const j = await r.json();
-    if (!r.ok) { alert(j?.error||'Restore failed'); return; }
-    row.remove();
+    if (e.target.classList.contains('btn-delete')) {
+      const confirmTxt = prompt(`Type the product_num to permanently DELETE:\n\n${pn}\n\n(or leave blank to cancel)`);
+      if (!confirmTxt || confirmTxt.trim().toLowerCase() !== pn.toLowerCase()) return;
+      const { ok, json } = await fetchJSON(`/api/admin/products/${encodeURIComponent(pn)}?hard=1`, { method:'DELETE' });
+      if (!ok) return alert(json?.error||'Delete failed');
+      tr.remove();
+    }
   });
 })();
