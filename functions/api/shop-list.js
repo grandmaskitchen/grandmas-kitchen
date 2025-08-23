@@ -19,8 +19,7 @@ export const onRequestGet = async ({ request, env }) => {
       'affiliate_link',
       'amazon_category',
       'approved',
-      'created_at',
-      'updated_at'
+      'created_at'
     ].join(','));
 
     // only approved products
@@ -30,8 +29,8 @@ export const onRequestGet = async ({ request, env }) => {
     if (cat) sb.searchParams.set('amazon_category', `eq.${cat}`);
     if (q)   sb.searchParams.set('or', `(my_title.ilike.*${q}*,amazon_title.ilike.*${q}*)`);
 
-    // ordering + limit
-    sb.searchParams.set('order', 'updated_at.desc,created_at.desc');
+    // ordering + limit (IMPORTANT: created_at only)
+    sb.searchParams.set('order', 'created_at.desc');
     sb.searchParams.set('limit', String(limit));
 
     const r = await fetch(sb.toString(), {
@@ -46,7 +45,6 @@ export const onRequestGet = async ({ request, env }) => {
       return json({ error: rows?.message || `Supabase error ${r.status}`, details: rows }, 500);
     }
 
-    // List as-is (no dedupe needed since we select newest first)
     const items = Array.isArray(rows) ? rows : [];
     return json({ items, count: items.length }, 200, { 'Cache-Control': 'public, max-age=60' });
   } catch (err) {
