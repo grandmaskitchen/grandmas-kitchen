@@ -35,6 +35,75 @@ function extractASIN(s) {
     return (m && m[1] && m[1].toUpperCase()) || '';
   } catch { return ''; }
 }
+// ========== Category Manager ==========
+(async function renderCategoryManager(){
+  const box = document.getElementById('catMgr');
+  if (!box) return;
+
+  async function load() {
+    box.innerHTML = '<small>Loading…</small>';
+    const r = await fetch('/api/admin/categories', { credentials:'include', cache:'no-store' });
+    const j = await r.json();
+    if (!r.ok) { box.innerHTML = `<small style="color:#a00">${j?.error||'Error'}</small>`; return; }
+    const items = Array.isArray(j.items)? j.items : [];
+    box.innerHTML = items.map(c => `
+      <div class="row" style="align-items:center;gap:8px;margin:.3rem 0" data-id="${c.id}">
+        <input class="rename" value="${c.name.replace(/"/g,'&quot;')}" style="flex:1">
+        <button class="save">Rename</button>
+        <select class="reassign"><option value="">— Reassign to… —</option>
+          ${items.filter(x=>x.id!==c.id).map(x=>`<option value="${x.id}">${x.name}</option>`).join('')}
+        </select>
+        <button class="del" style="background:#b33">Delete</button>
+      </div>
+    `).join('');
+  }
+  await load();
+
+  box.addEventListener('click', async (e) => {
+    const row = e.target.closest('[data-id]'); if (!row) return;
+    const id = row.dataset.id;
+
+    // Rename
+    if (e.target.classList.contains('save')) {
+      const name = row.querySelector('.rename').value.trim();
+      if (!name) return alert('Name required');
+      const r = await fetch(`/api/admin/categories/${encodeURIComponent(id)}`, {
+        method:'PATCH',
+        credentials:'include',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ name })
+      });
+      const j = await r.json();
+      if (!r.ok) return alert(j?.error||'Rename failed');
+      alert('Renamed ✔'); await load();
+    }
+
+    // Delete (optional reassignment)
+    if (e.target.classList.contains('del')) {
+      const to = row.querySelector('.reassign').value || '';
+      if (!confirm(`Delete this category${to?` (reassign products first)`:''}?`)) return;
+      const url = new URL(`/api/admin/categories/${encodeURIComponent(id)}`, location.origin);
+      if (to) url.searchParams.set('reassign_to', to);
+      const r = await fetch(url.toString(), { method:'DELETE', credentials:'include' });
+      const j = await r.json();
+      if (!r.ok) return alert(j?.error||'Delete failed');
+      alert('Deleted ✔'); await load();
+    }
+  });
+})();
+
+// ========== Product quick-delete ==========
+document.getElementById('btnDelProd')?.addEventListener('click', async () => {
+  const pn = (document.getElementById('delProdNum')?.value || '').trim().toLowerCase();
+  if (!pn) return alert('Enter product_num');
+  if (!confirm(`Delete product ${pn}?`)) return;
+  const r = await fetch(`/api/admin/products/${encodeURIComponent(pn)}`, {
+    method:'DELETE', credentials:'include'
+  });
+  const j = await r.json();
+  if (!r.ok) return alert(j?.error||'Delete failed');
+  alert('Deleted ✔');
+});
 
 // ---------- whoami banner ----------
 (async () => {
