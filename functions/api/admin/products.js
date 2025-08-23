@@ -28,13 +28,22 @@ export const onRequestGet = async ({ request, env }) => {
     if (state === 'archived') sb.searchParams.set('archived_at', 'not.is.null');
 
     // Text search across title, category and product_num
+    // inside functions/api/admin/products.js
+
     if (q) {
-      const term = `*${q}*`;
-      sb.searchParams.set(
-        'or',
-        `(my_title.ilike.${term},amazon_title.ilike.${term},amazon_category.ilike.${term},product_num.ilike.${term})`
-      );
-    }
+  const term = `*${q}*`;
+  sb.searchParams.set('or', `(${
+    [
+      `my_title.ilike.${term}`,
+      `amazon_title.ilike.${term}`,
+      `amazon_category.ilike.${term}`,
+      `product_num.ilike.${term}`,
+      // add these two if your columns exist:
+      `my_description_short.ilike.${term}`,
+      `amazon_desc.ilike.${term}`,
+    ].join(',')
+  })`);
+}
 
     sb.searchParams.set('order', 'created_at.desc');
     sb.searchParams.set('limit', String(limit));
