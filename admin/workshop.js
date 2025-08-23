@@ -322,5 +322,14 @@ testForm?.addEventListener('submit', async (e) => {
       if (!ok) return alert(json?.error||'Delete failed');
       tr.remove();
     }
+    - const { ok, json } = await fetchJSON(url.toString());
+- if (!ok) { rows.innerHTML = `<tr><td colspan="5" style="color:#a00">Error loading</td></tr>`; return; }
++ const { ok, status, json, text } = await fetchJSON(url.toString());
++ if (!ok) {
++   const msg = (json && (json.error || json.message)) || text || 'Unknown';
++   rows.innerHTML = `<tr><td colspan="5" style="color:#a00">Error ${status}: ${esc(String(msg)).slice(0,400)}</td></tr>`;
++   log('products search ERROR', { status, json, text });
++   return;
++ }
   });
 })();
