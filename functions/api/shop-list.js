@@ -48,6 +48,40 @@ export const onRequestGet = async ({ request, env }) => {
     return json({ error: err?.message || 'Server error' }, 500);
   }
 };
+// /functions/api/shop-list.js
+// GET /api/shop-list?limit=100&cat=Films
+export const onRequestGet = async ({ request, env }) => {
+  try {
+    const url = new URL(request.url);
+    const limit = Math.min(parseInt(url.searchParams.get("limit") || "100", 10), 200);
+    const cat = (url.searchParams.get("cat") || "").trim();
+
+    const u = new URL(`${env.SUPABASE_URL}/rest/v1/products`);
+    u.searchParams.set("select",
+      "product_num,my_title,image_main,amazon_title,amazon_category,shop_category_id"
+    );
+    u.searchParams.set("approved", "eq.true");
+    u.searchParams.set("archived_at", "is.null");            // hide archived
+    if (cat) u.searchParams.set("amazon_category", `eq.${cat}`);
+    u.searchParams.set("order", "updated_at.desc");
+    u.searchParams.set("limit", String(limit));
+
+    const r = await fetch(u.toString(), {
+      headers: {
+        apikey: env.SUPABASE_SERVICE_ROLE_KEY,
+        Authorization: `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}`,
+      },
+    });
+    const rows = await r.json();
+    if (!r.ok) return json({ error: rows?.message || "List failed" }, 400);
+    return json({ items: rows || [] });
+  } catch (e) {
+    return json({ error: e?.message || "Server error" }, 500);
+  }
+};
+function json(obj, status = 200) {
+  return new Response(JSON.stringify(obj), { status, headers: { "Content-Type": "application/json", "Cache-Control": "no-store" } });
+}
 
 function json(obj, status = 200, extra = {}) {
   return new Response(JSON.stringify(obj), {
