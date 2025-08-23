@@ -1,4 +1,3 @@
-/* ---- admin/worhshop.html ---- */
 <!doctype html>
 <html lang="en">
 <head>
@@ -19,17 +18,17 @@
     pre{background:#111;color:#0f0;padding:10px;border-radius:8px;overflow:auto;max-height:280px}
     .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
     small{color:#666}
+    input[type="text"]{padding:.5rem;border:1px solid #ccc;border-radius:8px}
   </style>
 </head>
 <body>
   <header>
     <h1>🔧 Workshop</h1>
     <p id="whoami" class="muted" style="margin-top:.25rem"></p>
-    <p class="muted">Daily ops: diagnostics, backups, home picks.</p>
+    <p class="muted">Daily ops: diagnostics, backups, picks, categories, quick deletes.</p>
   </header>
 
   <main class="grid">
-
     <section class="card">
       <h2>Diagnostics</h2>
       <div class="row">
@@ -41,20 +40,20 @@
       </div>
       <div id="diagOut" style="margin-top:10px"></div>
     </section>
-    
-    <!-- Test Fetch (Amazon URL/ASIN) -->
-<section class="card">
-  <h3>Test fetch</h3>
-  <form id="testFetchForm" class="row" style="margin:0 0 .5rem 0; grid-template-columns:1fr auto; gap:.5rem;">
-    <input id="testFetchInput" type="text"
-           placeholder="Paste Amazon URL or ASIN (e.g. B07XYZ1234)" />
-    <button id="btnTestFetch" type="submit" class="btn">Run</button>
-  </form>
 
-  <div id="testFetchOut" class="muted" style="min-height:60px">
-    <small>Try a full amazon.co.uk URL, an amzn.to short link, or a raw ASIN.</small>
-  </div>
-</section>
+    <section class="card">
+      <h2>Test fetch (Amazon URL or ASIN)</h2>
+      <form id="testFetchForm" class="row" style="margin:0 0 .5rem 0;">
+        <input id="testFetchInput" type="text" placeholder="Paste Amazon URL or ASIN (e.g. B07XYZ1234)" style="flex:1;min-width:220px"/>
+        <button id="btnTestFetch" type="submit" class="btn">Run</button>
+      </form>
+      <div id="testFetchOut" class="muted" style="min-height:60px">
+        <small>Try a full amazon.co.uk URL, an amzn.to short link, or a raw ASIN.</small>
+      </div>
+      <div style="margin-top:.5rem">
+        <a class="btn secondary" id="openAddProduct" href="/admin/add-product.html" target="_blank" rel="noopener">Open “Add Product”</a>
+      </div>
+    </section>
 
     <section class="card">
       <h2>Backups (download JSON)</h2>
@@ -66,52 +65,39 @@
     </section>
 
     <section class="card">
-  <h2>Home Picks</h2>
-  <p class="muted">
-    Pick 6 random <em>approved</em> products into <code>shop_products</code> (today’s picks).
-  </p>
-  <div class="row">
-    <button id="refreshHomePicks">Refresh 6 random</button>
-    <a class="btn secondary" href="/shop.html" target="_blank" rel="noopener">View shop</a>
-  </div>
-  <div id="picksOut" style="margin-top:10px"></div>
-</section>
+      <h2>Home Picks</h2>
+      <p class="muted">Pick 6 random <em>approved</em> products into <code>shop_products</code> (today’s picks).</p>
+      <div class="row">
+        <button id="btnRefreshPicks">Refresh 6 random</button>
+        <a class="btn secondary" href="/shop.html" target="_blank" rel="noopener">View shop</a>
+      </div>
+      <div id="picksOut" style="margin-top:10px"></div>
+    </section>
 
     <section class="card">
-      <h2>Shortcuts</h2>
-      <div class="row">
-        <a class="btn secondary" href="/admin/add-product.html" target="_blank">Add product</a>
-        <a class="btn secondary" href="/api/diag" target="_blank">/api/diag</a>
-        <a class="btn secondary" href="/api/shop-list" target="_blank">/api/shop-list</a>
-        <a class="btn secondary" href="/admin/dashboard.html">Approve products</a>
+      <h2>Category Manager</h2>
+      <div id="catMgr"><small>Loading…</small></div>
+    </section>
 
+    <section class="card">
+      <h2>Product Tools</h2>
+      <div class="row">
+        <input id="delProdNum" placeholder="product_num (e.g. b00abc1234)" />
+        <button id="btnDelProd">Delete product</button>
       </div>
+    </section>
+
+    <section class="card">
+      <h2>Archived Products</h2>
+      <div id="archivedBox"><small>Loading…</small></div>
     </section>
 
     <section class="card">
       <h2>Debug</h2>
       <pre id="debugBox">(nothing yet)</pre>
     </section>
-    
-<section>
-  <h2>Category Manager</h2>
-  <div id="catMgr"></div>
-</section>
-
-<section>
-  <h2>Product Tools</h2>
-  <div id="prodTools">
-    <input id="delProdNum" placeholder="product_num (e.g. b00abc1234)" />
-    <button id="btnDelProd">Delete product</button>
-  </div>
-</section>
-<section>
-  <h2>Archived Products</h2>
-  <div id="archivedBox"><small>Loading…</small></div>
-</section>
-
   </main>
 
-  <script src="/admin/workshop.js" defer></script>
+  <script src="/admin/workshop.js?v=2025-08-23-1" defer></script>
 </body>
 </html>
