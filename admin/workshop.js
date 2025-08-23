@@ -161,6 +161,47 @@ testForm?.addEventListener('submit', async (e) => {
         <div><b>Affiliate Link:</b> ${s.affiliate_link ? `<a href="${esc(s.affiliate_link)}" target="_blank" rel="noopener">open</a>` : esc(input)}</div>
       </div>
     </div>
+// ===== Archived Products (restore) =====
+(async function archivedManager(){
+  const box = document.getElementById('archivedBox');
+  if (!box) return;
+
+  async function load() {
+    const r = await fetch('/api/admin/products/list?archived=1&limit=200', {
+      credentials:'include', cache:'no-store'
+    });
+    const j = await r.json();
+    if (!r.ok) { box.innerHTML = `<small style="color:#a00">${j?.error||'Error loading'}</small>`; return; }
+    const items = Array.isArray(j.items) ? j.items : [];
+    if (!items.length) { box.innerHTML = `<small>Nothing archived.</small>`; return; }
+
+    box.innerHTML = items.map(p => `
+      <div class="row" style="gap:8px;align-items:center;margin:.3rem 0" data-pn="${p.product_num}">
+        <img src="${(p.image_main||'').replace(/"/g,'&quot;')}" alt="" style="width:48px;height:48px;object-fit:cover;border-radius:6px;border:1px solid #eee">
+        <div style="flex:1;min-width:0">
+          <div style="font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${(p.my_title||p.amazon_title||'').replace(/</g,'&lt;')}</div>
+          <div class="muted"><code>${p.product_num}</code>${p.amazon_category?` • ${p.amazon_category}`:''}</div>
+        </div>
+        <button class="btn-restore">Restore</button>
+      </div>
+    `).join('');
+  }
+  await load();
+
+  box.addEventListener('click', async (e) => {
+    if (!e.target.classList.contains('btn-restore')) return;
+    const row = e.target.closest('[data-pn]'); if (!row) return;
+    const pn = row.dataset.pn;
+    const r = await fetch(`/api/admin/products/${encodeURIComponent(pn)}/archive`, {
+      method:'POST', credentials:'include',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ restore: 1 })
+    });
+    const j = await r.json();
+    if (!r.ok) { alert(j?.error||'Restore failed'); return; }
+    row.remove();
+  });
+})();
 
     <details style="margin-top:.5rem">
       <summary>Raw JSON</summary>
