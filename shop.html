@@ -102,5 +102,38 @@
   }
 })();
 </script>
+  <script>
+(async function adminOverlay(){
+  const admin = new URLSearchParams(location.search).get('admin') === '1';
+  if (!admin) return;
+
+  // After the grid has been rendered by your existing code, add delete buttons
+  const wait = (ms)=>new Promise(r=>setTimeout(r,ms));
+  for (let i=0;i<20;i++){ // wait up to ~2s for grid population
+    await wait(100);
+    if ([...document.querySelectorAll('#grid article')].length) break;
+  }
+
+  document.querySelectorAll('#grid article').forEach(card => {
+    const link = card.querySelector('a[href^="/products/"]');
+    if (!link) return;
+    const slug = decodeURIComponent(link.getAttribute('href').split('/').pop());
+    const btn = document.createElement('button');
+    btn.textContent = '🗑';
+    btn.title = `Delete ${slug}`;
+    btn.style.cssText = 'position:absolute;top:6px;right:6px;background:#b33;color:#fff;border:0;border-radius:6px;padding:4px 6px;cursor:pointer';
+    btn.addEventListener('click', async () => {
+      if (!confirm(`Delete product ${slug}?`)) return;
+      const r = await fetch(`/api/admin/products/${encodeURIComponent(slug)}`, { method:'DELETE', credentials:'include' });
+      const j = await r.json();
+      if (!r.ok) return alert(j?.error||'Delete failed');
+      card.remove();
+    });
+    card.style.position = 'relative';
+    card.appendChild(btn);
+  });
+})();
+</script>
+
 </body>
 </html>
