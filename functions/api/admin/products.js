@@ -48,6 +48,9 @@ export const onRequestGet = async ({ request, env }) => {
     sb.searchParams.set('order', 'created_at.desc');
     sb.searchParams.set('limit', String(limit));
 
+    // right before the fetch in the endpoint
+    console.log('[admin/products] ->', sb.toString());
+    
     const r = await fetch(sb.toString(), {
       headers: {
         apikey: env.SUPABASE_SERVICE_ROLE_KEY,
