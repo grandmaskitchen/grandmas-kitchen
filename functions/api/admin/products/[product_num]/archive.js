@@ -1,28 +1,32 @@
 // /functions/api/admin/products/[product_num]/archive.js
-// POST body {}          -> archive now
-// POST body {restore:1} -> restore
-// Optional body {reason:"..."} stored in archived_reason
+// POST -> { restore:1 } to clear archived_at (restore)
+// POST -> (no restore) to set archived_at = now (archive)
 
 export const onRequestOptions = ({ request }) =>
-  new Response(null, { status: 204, headers: allow(request, "POST, OPTIONS") });
+  new Response(null, {
+    status: 204,
+    headers: {
+      "Access-Control-Allow-Origin": request.headers.get("Origin") || "*",
+      "Access-Control-Allow-Credentials": "true",
+      "Access-Control-Allow-Methods": "POST, OPTIONS",
+      "Access-Control-Allow-Headers":
+        "Content-Type, Cf-Access-Jwt-Assertion, Cf-Access-Authenticated-User-Email",
+    },
+  });
 
 export const onRequestPost = async ({ params, request, env }) => {
   try {
-    const product_num = String(params.product_num || "").trim().toLowerCase();
-    if (!product_num) return j(400, { error: "product_num required" }, request);
+    const pn = String(params?.product_num || "").trim().toLowerCase();
+    if (!pn) return json({ error: "product_num required" }, 400);
 
-    let body = {};
-    try { body = await request.json(); } catch {}
-    const restore = body?.restore ? true : false;
-    const reason  = typeof body?.reason === "string" ? body.reason.trim() : null;
+    let restore = false;
+    try {
+      const body = await request.json();
+      restore = !!(body && (body.restore || body.unarchive));
+    } catch { /* no body */ }
 
-    // Patch product: archive or restore
     const u = new URL(`${env.SUPABASE_URL}/rest/v1/products`);
-    u.searchParams.set("product_num", `eq.${product_num}`);
-
-    const patch = restore
-      ? { archived_at: null, archived_reason: null }
-      : { archived_at: new Date().toISOString(), archived_reason: reason };
+    u.searchParams.set("product_num", `eq.${pn}`);
 
     const r = await fetch(u.toString(), {
       method: "PATCH",
@@ -30,46 +34,24 @@ export const onRequestPost = async ({ params, request, env }) => {
         "Content-Type": "application/json",
         apikey: env.SUPABASE_SERVICE_ROLE_KEY,
         Authorization: `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}`,
-        Prefer: "return=representation"
+        Prefer: "return=representation",
       },
-      body: JSON.stringify(patch)
+      body: JSON.stringify({ archived_at: restore ? null : new Date().toISOString() }),
     });
 
-    const out = await r.json().catch(() => null);
-    if (!r.ok) return j(400, { error: out?.message || "Update failed", details: out }, request);
+    const out = await r.json();
+    if (!r.ok) return json({ error: out?.message || "Update failed", details: out }, 400);
+
     const product = Array.isArray(out) ? out[0] : out;
-
-    // Also remove from home_picks (ignore if table missing)
-    try {
-      const hp = new URL(`${env.SUPABASE_URL}/rest/v1/home_picks`);
-      hp.searchParams.set("product_num", `eq.${product_num}`);
-      await fetch(hp.toString(), {
-        method: "DELETE",
-        headers: {
-          apikey: env.SUPABASE_SERVICE_ROLE_KEY,
-          Authorization: `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}`
-        }
-      });
-    } catch {}
-
-    return j(200, { ok: true, product, archived: !restore }, request);
+    return json({ ok: true, product });
   } catch (e) {
-    return j(500, { error: e?.message || "Server error" }, request);
+    return json({ error: e?.message || "Server error" }, 500);
   }
 };
 
-function allow(req, methods) {
-  return {
-    "Access-Control-Allow-Origin": req.headers.get("Origin") || "*",
-    "Access-Control-Allow-Credentials": "true",
-    "Access-Control-Allow-Methods": methods,
-    "Access-Control-Allow-Headers": "Content-Type, Cf-Access-Jwt-Assertion, Cf-Access-Authenticated-User-Email",
-    "Cache-Control": "no-store"
-  };
-}
-function j(status, body, req) {
-  return new Response(JSON.stringify(body), {
+function json(obj, status = 200) {
+  return new Response(JSON.stringify(obj), {
     status,
-    headers: { ...allow(req, "*"), "Content-Type": "application/json" }
+    headers: { "Content-Type": "application/json" },
   });
 }
