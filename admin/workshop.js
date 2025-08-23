@@ -147,6 +147,10 @@ testForm?.addEventListener('submit', async (e) => {
   const image = s.image_main || s.image_small || '';
   const title = s.amazon_title || '';
   const cat   = s.amazon_category || '';
+  
+// ===== Update admin/workshop.js to call the new endpoint: =====
+  - const url = new URL('/api/admin/products', location.origin);
+  + const url = new URL('/api/admin/products-search', location.origin);
 
   testOut.innerHTML = `
     <div style="display:grid;grid-template-columns:120px 1fr;gap:12px;align-items:start">
