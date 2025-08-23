@@ -5,12 +5,11 @@
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
   <title>Workshop • Admin</title>
   <meta name="robots" content="noindex,nofollow"/>
-  <link rel="stylesheet" href="/style.css"/>
   <style>
     body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;background:#fffdf8;color:#222;margin:0}
-    header,main{max-width:1024px;margin:0 auto;padding:16px}
+    header,main{max-width:960px;margin:0 auto;padding:16px}
     h1{margin:8px 0 4px}
-    .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px;margin-top:12px}
+    .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px;margin-top:12px}
     .card{background:#fff;padding:14px;border-radius:10px;box-shadow:0 2px 8px rgba(0,0,0,.06)}
     .card h2{font-size:1.05rem;margin:0 0 .5rem}
     button, a.btn{background:#44633F;color:#fff;border:0;border-radius:8px;padding:.6rem .9rem;cursor:pointer;text-decoration:none;display:inline-block}
@@ -19,17 +18,15 @@
     pre{background:#111;color:#0f0;padding:10px;border-radius:8px;overflow:auto;max-height:280px}
     .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
     small{color:#666}
-    .field{display:flex;gap:8px;align-items:center}
-    .input{width:100%;box-sizing:border-box;padding:.55rem .7rem;border:1px solid #cfcfcf;border-radius:8px;font-size:1rem}
-    .pill{display:inline-block;padding:.15rem .5rem;border-radius:999px;background:#eef3ee;color:#2f5130;font-size:.8rem;margin-right:.25rem}
-    .tbl{width:100%;border-collapse:collapse;margin-top:.5rem}
-    .tbl th,.tbl td{padding:.45rem .5rem;border-top:1px solid #eee;vertical-align:middle}
-    .tbl th{font-size:.85rem;text-align:left;color:#555}
-    .tbl tr:hover{background:#fafafa}
+    .table-wrap{overflow:auto}
+    table{width:100%;border-collapse:collapse}
+    th,td{padding:.55rem .6rem;border-top:1px solid #eee;vertical-align:top}
+    th{font-weight:600;text-align:left;color:#444}
+    td.actions{white-space:nowrap}
+    .pill{display:inline-block;background:#eef3ee;color:#2f5130;border-radius:999px;padding:.15rem .5rem;font-size:.8rem}
     .btn-danger{background:#b33}
-    .btn-warn{background:#946200}
-    .thumb{width:44px;height:44px;object-fit:cover;border-radius:6px;border:1px solid #eee;background:#fff}
-    .tag-arch{background:#fdeaea;color:#8a1f11}
+    .btn-quiet{background:#ddd;color:#222}
+    input[type="text"]{flex:1;min-width:220px;padding:.55rem .6rem;border:1px solid #cfcfcf;border-radius:8px;font-size:1rem}
   </style>
 </head>
 <body>
@@ -40,84 +37,43 @@
   </header>
 
   <main class="grid">
-
-    <section class="card">
-      <h2>Diagnostics</h2>
-      <div class="row">
-        <button id="btnDiagProducts">Run diag (products)</button>
-        <button id="btnDiagShop">Run diag (shop_products)</button>
-      </div>
-      <div class="row" style="margin-top:8px">
-        <button id="btnStats">Quick stats</button>
-      </div>
-      <div id="diagOut" style="margin-top:10px"></div>
-    </section>
-
-    <section class="card">
-      <h2>Test fetch (Amazon URL or ASIN)</h2>
-      <form id="testFetchForm" class="row" style="margin:0 0 .5rem 0;">
-        <input id="testFetchInput" class="input" type="text" placeholder="Paste Amazon URL or ASIN (e.g. B07XYZ1234)"/>
-        <button id="btnTestFetch" type="submit">Run</button>
-      </form>
-      <div id="testFetchOut" class="muted" style="min-height:60px">
-        <small>Try a full amazon.co.uk URL, an amzn.to short link, or a raw ASIN.</small>
-      </div>
-      <a class="btn secondary" href="/admin/add-product.html" target="_blank" rel="noopener">Open “Add Product”</a>
-    </section>
-
-    <section class="card">
-      <h2>Backups (download JSON)</h2>
-      <div class="row">
-        <button data-table="products" class="btnBackup">Download products</button>
-        <button data-table="shop_products" class="btnBackup">Download shop_products</button>
-      </div>
-      <small>Files download as <code>products-YYYYMMDD.json</code> etc.</small>
-    </section>
-
-    <section class="card">
-      <h2>Home Picks</h2>
-      <p class="muted">Pick 6 random <em>approved</em> products into <code>shop_products</code> (today’s picks).</p>
-      <div class="row">
-        <button id="btnRefreshPicks">Refresh 6 random</button>
-        <a class="btn secondary" href="/shop.html" target="_blank" rel="noopener">View shop</a>
-      </div>
-      <div id="picksOut" style="margin-top:10px"></div>
-    </section>
-
-    <section class="card">
-      <h2>Category Manager</h2>
-      <div id="catMgr"><small class="muted">Loading…</small></div>
-    </section>
-
+    <!-- Products — Archive / Delete -->
     <section class="card" style="grid-column:1/-1">
       <h2>Products — Archive / Delete</h2>
-      <div class="row" style="margin:.25rem 0 .35rem">
-        <input id="prodSearch" class="input" placeholder="Search by name, product_num/ASIN, or category">
-        <button id="btnProdSearch">Search</button>
-        <label class="field"><input type="radio" name="archScope" value="active" checked> Active</label>
-        <label class="field"><input type="radio" name="archScope" value="archived"> Archived</label>
-        <label class="field"><input type="radio" name="archScope" value="all"> All</label>
+      <div class="row" style="margin-bottom:.4rem">
+        <input id="prodSearch" type="text" placeholder="Search title, category, or product_num…">
+        <button id="prodSearchBtn" type="button">Search</button>
+        <label><input type="radio" name="prodState" value="active"> Active</label>
+        <label><input type="radio" name="prodState" value="archived"> Archived</label>
+        <label><input type="radio" name="prodState" value="all" checked> All</label>
       </div>
-      <table class="tbl" aria-describedby="prodHelp">
-        <thead>
-          <tr>
-            <th>Product</th><th>Category</th><th>product_num</th><th>Updated</th><th>Actions</th>
-          </tr>
-        </thead>
-        <tbody id="prodRows">
-          <tr><td colspan="5" class="muted"><small>Type a search and press “Search”.</small></td></tr>
-        </tbody>
-      </table>
-      <p id="prodHelp" class="muted" style="margin-top:.35rem">
-        Archive hides the item (kept for revival). Delete removes permanently.
+
+      <div class="table-wrap">
+        <table aria-label="Products search results">
+          <thead>
+            <tr>
+              <th style="width:48%">Product</th>
+              <th style="width:18%">Category</th>
+              <th style="width:16%">product_num</th>
+              <th style="width:12%">Updated</th>
+              <th style="width:6%">Actions</th>
+            </tr>
+          </thead>
+          <tbody id="prodTbody">
+            <tr><td colspan="5" class="muted">Type a search and press “Search”.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="muted" style="margin-top:.5rem">
+        <b>Archive</b> hides the item (kept for revival). <b>Delete</b> removes permanently.
       </p>
     </section>
 
+    <!-- Debug -->
     <section class="card">
       <h2>Debug</h2>
       <pre id="debugBox">(nothing yet)</pre>
     </section>
-
   </main>
 
   <script src="/admin/workshop.js" defer></script>
