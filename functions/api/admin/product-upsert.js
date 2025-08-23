@@ -44,7 +44,7 @@ export const onRequestPost = async ({ request, env }) => {
       "commission_l",
       "approved",
       "added_by",
-      "shop_category_id",  // REQUIRED: FK to categories.id
+      "shop_category_id",  // REQUIRED: FK to categories.id (int or uuid)
       "category_slug"      // convenience input we resolve to id
     ]);
 
@@ -112,11 +112,17 @@ export const onRequestPost = async ({ request, env }) => {
       if (!cat) return json({ error: "Unknown category_slug" }, 400);
       row.shop_category_id = cat.id;
     }
-    const cid = Number(row.shop_category_id);
-    if (!Number.isInteger(cid) || cid <= 0) {
+    if (!row.shop_category_id) {
       return json({ error: "Category is required (shop_category_id or category_slug)" }, 400);
     }
-    row.shop_category_id = cid;
+    // Support numeric IDs and UUIDs transparently
+    const cidRaw = row.shop_category_id;
+    const cidNum = Number(cidRaw);
+    if (Number.isInteger(cidNum) && String(cidNum) === String(cidRaw).trim()) {
+      row.shop_category_id = cidNum;               // numeric category id
+    } else {
+      row.shop_category_id = String(cidRaw).trim(); // uuid/text category id
+    }
     delete row.category_slug;
 
     // product_num: prefer ASIN if detected; else slug of title + suffix
@@ -224,8 +230,8 @@ function slugify(s) {
   return String(s || "")
     .toLowerCase()
     .normalize("NFKD")
-    .replace(/[\u0300-\u036f]/g, "")     // strip accents
-    .replace(/[^a-z0-9]+/g, "-")         // non-alnum -> dash
-    .replace(/^-+|-+$/g, "")             // trim dashes
-    .slice(0, 60);                       // keep short for URLs
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 60);
 }
