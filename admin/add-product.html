@@ -89,12 +89,6 @@
       <div id="testFetchOut" style="margin-top:.5rem"></div>
     </section>
   </div>
-  
-fetch('/api/admin/amazon-fetch', {
-  method:'POST', credentials:'include',
-  headers:{'Content-Type':'application/json'},
-  body: JSON.stringify({ input: 'B000123456' }) // or a real URL/ASIN
-}).then(r=>r.text()).then(t=>console.log(t));
 
   <!-- Amazon fetch wiring + integrated preview -->
 <script>
@@ -180,7 +174,7 @@ fetch('/api/admin/amazon-fetch', {
     try{
       const r = await fetch('/api/admin/amazon-fetch', {
         method:'POST',
-        credentials:'include',                // <<< important (auth cookies)
+        credentials:'include',                // carry auth cookies, if any
         cache: 'no-store',
         headers:{ 'Content-Type':'application/json' },
         body: JSON.stringify({ input })
@@ -188,17 +182,14 @@ fetch('/api/admin/amazon-fetch', {
 
       const text = await r.text();
       let payload;
-      try {
-        payload = JSON.parse(text);
-      } catch {
-        throw new Error('Non-JSON response from /api/admin/amazon-fetch. First 160 chars:\n' + text.slice(0,160));
-      }
+      try { payload = JSON.parse(text); }
+      catch { throw new Error('Non-JSON response from /api/admin/amazon-fetch. First 160 chars:\n' + text.slice(0,160)); }
 
       if (!r.ok){
         throw new Error(payload?.error?.message || payload?.error || 'Fetch failed ('+r.status+')');
       }
 
-      // Shape robustness: support {scraped:{...}} or flat fields
+      // Accept {scraped:{...}} or flat
       const s = payload.scraped || payload || {};
 
       // title & description
@@ -278,7 +269,7 @@ fetch('/api/admin/amazon-fetch', {
   } catch (e) {
     console.warn('[add-product] auto-prefill skipped:', e);
   }
-})();  /* <-- this was missing */
+})();
 </script>
 
   <!-- Categories: load list + add-new inline -->
@@ -292,7 +283,7 @@ fetch('/api/admin/amazon-fetch', {
         if (Array.isArray(items)){
           items.forEach(c=>{
             const opt = document.createElement('option');
-            opt.value = c.id;
+            opt.value = c.id;          /* supports numeric or UUID */
             opt.textContent = c.name;
             selectEl.appendChild(opt);
           });
@@ -319,10 +310,9 @@ fetch('/api/admin/amazon-fetch', {
         const j = await r.json();
         if (!r.ok || !j?.category?.id) throw new Error(j?.error || 'Create failed');
 
-        // refresh list and select new one
         const sel = document.getElementById('shopCategory');
         await loadCategoriesInto(sel);
-        sel.value = j.category.id;
+        sel.value = j.category.id;   // select the new row
         input.value = '';
       }catch(e){
         alert('Could not add category: ' + (e.message || e));
