@@ -133,6 +133,69 @@
     card.appendChild(btn);
   });
 })();
+    <style>
+  /* admin-only affordances */
+  article.card { position: relative; }
+  .admin-archive {
+    position:absolute; top:6px; right:6px;
+    background:#b33; color:#fff; border:0; border-radius:8px;
+    padding:4px 8px; cursor:pointer; font-size:.9rem;
+    box-shadow:0 1px 4px rgba(0,0,0,.15);
+  }
+  .broken img { opacity:.6; }
+  article.card.broken { outline: 2px dashed #b33; }
+</style>
+<script>
+(async function adminOverlay(){
+  // Only show when explicitly requested (and you're authenticated behind Access).
+  const admin = new URLSearchParams(location.search).get('admin') === '1';
+  if (!admin) return;
+
+  // Wait for grid to populate (your existing JS does this async)
+  const wait = ms => new Promise(r => setTimeout(r, ms));
+  for (let i=0;i<30;i++){ await wait(100); if (document.querySelector('#grid article')) break; }
+
+  function getSlugFromCard(card){
+    const a = card.querySelector('a.product-image');
+    if (!a) return null;
+    const href = a.getAttribute('href') || '';
+    return decodeURIComponent(href.split('/').pop() || '');
+  }
+
+  // Add archive button to each card
+  document.querySelectorAll('#grid article.card').forEach(card => {
+    const slug = getSlugFromCard(card);
+    if (!slug) return;
+
+    // Mark card broken if image fails
+    const img = card.querySelector('.product-image img');
+    if (img) {
+      img.addEventListener('error', () => {
+        card.classList.add('broken');
+      }, { once:true });
+    }
+
+    const btn = document.createElement('button');
+    btn.className = 'admin-archive';
+    btn.textContent = 'Archive';
+    btn.title = `Hide this product (${slug}) from site`;
+    btn.addEventListener('click', async () => {
+      if (!confirm(`Archive product ${slug} now?\n(It will be hidden from Shop & Home Picks but can be restored later.)`)) return;
+      const r = await fetch(`/api/admin/products/${encodeURIComponent(slug)}/archive`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type':'application/json' },
+        body: JSON.stringify({ reason: 'archived from shop overlay' })
+      });
+      const j = await r.json();
+      if (!r.ok) { alert(j?.error || 'Archive failed'); return; }
+      card.remove();
+    });
+    card.appendChild(btn);
+  });
+})();
+</script>
+
 </script>
 
 </body>
