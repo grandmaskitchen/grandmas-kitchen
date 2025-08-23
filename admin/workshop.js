@@ -1,133 +1,215 @@
-// === Products — Archive / Delete (ADD THIS BLOCK) ===
-(() => {
-  const $  = (window.$  || ((s)=>document.querySelector(s)));
-  const $$ = (window.$$ || ((s)=>Array.from(document.querySelectorAll(s))));
-  const dbg = document.getElementById('debugBox') || { textContent:'', append(){}, };
-  const log = (t, o) => { try { console.log(t, o); } catch{}; if (dbg) dbg.textContent += `\n\n=== ${t} ===\n${typeof o==='string'?o:JSON.stringify(o,null,2)}`; };
-  const esc = (s)=>String(s??'').replace(/[&<>"']/g, m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m]));
-  const prodInput = document.getElementById('prodSearch');
-  const prodBtn   = document.getElementById('prodSearchBtn');
-  const tbody     = document.getElementById('prodTbody');
-  if (!prodInput || !prodBtn || !tbody) return; // panel not on this page build
+/* ---- admin/workshop.js ---- */
 
-  // Small helper that doesn't collide with your existing fetchJSON
-  async function fetchJSON2(url, opts={}) {
-    const r = await fetch(url, { credentials:'include', cache:'no-store', ...opts });
-    const text = await r.text();
-    let json; try { json = JSON.parse(text); } catch { json = { raw:text }; }
-    return { ok:r.ok, status:r.status, json, text };
+// ---------- tiny helpers ----------
+const $ = (sel) => document.querySelector(sel);
+const debugBox = $('#debugBox');
+
+function log(title, obj) {
+  const line =
+    `\n\n=== ${title} ===\n` +
+    (typeof obj === 'string' ? obj : JSON.stringify(obj, null, 2));
+  if (debugBox) debugBox.textContent += line;
+  try { console.log(title, obj); } catch {}
+}
+
+async function fetchJSON(url, opts = {}) {
+  const r = await fetch(url, { credentials: 'include', cache: 'no-store', ...opts });
+  const text = await r.text();
+  let json; try { json = JSON.parse(text); } catch { json = { raw: text }; }
+  return { ok: r.ok, status: r.status, json, text };
+}
+
+function esc(s) {
+  return String(s ?? '').replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m]));
+}
+function extractASIN(s) {
+  if (!s) return '';
+  const str = String(s).trim();
+  if (/^[A-Z0-9]{10}$/i.test(str)) return str.toUpperCase();
+  try {
+    const u = new URL(str, 'https://x.invalid');
+    const m =
+      u.pathname.match(/\/dp\/([A-Z0-9]{10})/i) ||
+      u.pathname.match(/\/gp\/product\/([A-Z0-9]{10})/i) ||
+      u.search.match(/[?&]asin=([A-Z0-9]{10})/i);
+    return (m && m[1] && m[1].toUpperCase()) || '';
+  } catch { return ''; }
+}
+// ========== Category Manager ==========
+(async function renderCategoryManager(){
+  const box = document.getElementById('catMgr');
+  if (!box) return;
+
+  async function load() {
+    box.innerHTML = '<small>Loading…</small>';
+    const r = await fetch('/api/admin/categories', { credentials:'include', cache:'no-store' });
+    const j = await r.json();
+    if (!r.ok) { box.innerHTML = `<small style="color:#a00">${j?.error||'Error'}</small>`; return; }
+    const items = Array.isArray(j.items)? j.items : [];
+    box.innerHTML = items.map(c => `
+      <div class="row" style="align-items:center;gap:8px;margin:.3rem 0" data-id="${c.id}">
+        <input class="rename" value="${c.name.replace(/"/g,'&quot;')}" style="flex:1">
+        <button class="save">Rename</button>
+        <select class="reassign"><option value="">— Reassign to… —</option>
+          ${items.filter(x=>x.id!==c.id).map(x=>`<option value="${x.id}">${x.name}</option>`).join('')}
+        </select>
+        <button class="del" style="background:#b33">Delete</button>
+      </div>
+    `).join('');
   }
+  await load();
 
-  const stateVal = () => ($$('input[name="prodState"]').find(r=>r.checked)?.value || 'all');
-  const fmtDate = (s)=>{ if(!s) return ''; const d=new Date(s); return isFinite(d)? d.toLocaleDateString(undefined,{year:'2-digit',month:'short',day:'2-digit'}):s; };
+  box.addEventListener('click', async (e) => {
+    const row = e.target.closest('[data-id]'); if (!row) return;
+    const id = row.dataset.id;
 
-  const rowHtml = (p) => {
-    const title = p.my_title || p.amazon_title || '(untitled)';
-    const cat   = p.amazon_category || '';
-    const pn    = p.product_num || '';
-    const img   = p.image_main ? `<img src="${esc(p.image_main)}" alt="" style="width:36px;height:36px;object-fit:cover;border-radius:6px;border:1px solid #eee;margin-right:8px">` : '';
-    const active = !p.archived_at;
-    return `<tr data-pn="${esc(pn)}">
-      <td><div style="display:flex;align-items:center">${img}<div><div style="font-weight:600">${esc(title)}</div></div></div></td>
-      <td>${cat ? `<span style="display:inline-block;background:#eef3ee;color:#2f5130;border-radius:999px;padding:.15rem .5rem;font-size:.8rem">${esc(cat)}</span>` : ''}</td>
-      <td><code>${esc(pn)}</code></td>
-      <td>${fmtDate(p.updated_at || p.created_at)}</td>
-      <td class="actions">
-        <button class="btn-archive" style="background:#ddd;color:#222;border:0;border-radius:8px;padding:.35rem .6rem;margin-right:4px">${active?'Archive':'Restore'}</button>
-        <button class="btn-delete"  style="background:#b33;color:#fff;border:0;border-radius:8px;padding:.35rem .6rem">Delete</button>
-      </td>
-    </tr>`;
-  };
-
-  async function search() {
-    const q = (prodInput.value || '').trim();
-    const s = stateVal();
-    prodBtn.disabled = true;
-    tbody.innerHTML = `<tr><td colspan="5" class="muted">Loading…</td></tr>`;
-    try {
-      // Use the public list you already have, then filter client-side by archived/active.
-      const url = new URL('/api/products-list', location.origin);
-      if (q) url.searchParams.set('q', q);
-      url.searchParams.set('limit', '200');
-
-      const { ok, status, json, text } = await fetchJSON2(url.toString());
-      if (!ok) throw new Error(json?.error || text || `HTTP ${status}`);
-      let items = Array.isArray(json.products || json.items) ? (json.products || json.items) : [];
-
-      if (s === 'active')   items = items.filter(p => !p.archived_at);
-      if (s === 'archived') items = items.filter(p =>  p.archived_at);
-
-      log('products search', { q, state:s, count:items.length });
-
-      tbody.innerHTML = items.length
-        ? items.map(rowHtml).join('')
-        : `<tr><td colspan="5" class="muted">No matches.</td></tr>`;
-    } catch (e) {
-      tbody.innerHTML = `<tr><td colspan="5" style="color:#a00">Error: ${esc(e.message||e)}</td></tr>`;
-      log('products search ERROR', e);
-    } finally {
-      prodBtn.disabled = false;
-    }
-  }
-
-  // Try a few endpoint shapes for archive/delete to fit your repo
-  async function tryEndpoints(queue) {
-    let lastErr;
-    for (const req of queue) {
-      try {
-        const { ok, json, text, status } = await fetchJSON2(req.url, req.opts);
-        if (ok) return { ok:true, json };
-        lastErr = new Error(json?.error || text || `HTTP ${status}`);
-      } catch (e) { lastErr = e; }
-    }
-    throw lastErr || new Error('All endpoints failed');
-  }
-
-  tbody.addEventListener('click', async (e) => {
-    const tr = e.target.closest('tr[data-pn]');
-    if (!tr) return;
-    const pn = tr.dataset.pn;
-
-    // Archive / Restore
-    if (e.target.classList.contains('btn-archive')) {
-      const restoring = e.target.textContent.toLowerCase() === 'restore';
-      if (!confirm(`${restoring ? 'Restore' : 'Archive'} ${pn}?`)) return;
-      e.target.disabled = true;
-      try {
-        await tryEndpoints([
-          { url:`/api/admin/products/${encodeURIComponent(pn)}/archive`, opts:{ method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(restoring?{restore:1}:{}) } },
-          { url:`/api/products/${encodeURIComponent(pn)}/archive`,       opts:{ method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(restoring?{restore:1}:{}) } },
-          { url:`/api/product-${restoring?'restore':'archive'}?product_num=${encodeURIComponent(pn)}`, opts:{ method:'POST' } },
-        ]);
-        tr.remove();
-      } catch (err) {
-        alert(err?.message || err);
-      } finally {
-        e.target.disabled = false;
-      }
+    // Rename
+    if (e.target.classList.contains('save')) {
+      const name = row.querySelector('.rename').value.trim();
+      if (!name) return alert('Name required');
+      const r = await fetch(`/api/admin/categories/${encodeURIComponent(id)}`, {
+        method:'PATCH',
+        credentials:'include',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ name })
+      });
+      const j = await r.json();
+      if (!r.ok) return alert(j?.error||'Rename failed');
+      alert('Renamed ✔'); await load();
     }
 
-    // Delete
-    if (e.target.classList.contains('btn-delete')) {
-      if (!confirm(`DELETE ${pn} permanently?\nThis cannot be undone.`)) return;
-      e.target.disabled = true;
-      try {
-        await tryEndpoints([
-          { url:`/api/admin/products/${encodeURIComponent(pn)}`, opts:{ method:'DELETE' } },
-          { url:`/api/products/${encodeURIComponent(pn)}`,       opts:{ method:'DELETE' } },
-          { url:`/api/product-delete?product_num=${encodeURIComponent(pn)}`, opts:{ method:'POST' } },
-        ]);
-        tr.remove();
-      } catch (err) {
-        alert(err?.message || err);
-      } finally {
-        e.target.disabled = false;
-      }
+    // Delete (optional reassignment)
+    if (e.target.classList.contains('del')) {
+      const to = row.querySelector('.reassign').value || '';
+      if (!confirm(`Delete this category${to?` (reassign products first)`:''}?`)) return;
+      const url = new URL(`/api/admin/categories/${encodeURIComponent(id)}`, location.origin);
+      if (to) url.searchParams.set('reassign_to', to);
+      const r = await fetch(url.toString(), { method:'DELETE', credentials:'include' });
+      const j = await r.json();
+      if (!r.ok) return alert(j?.error||'Delete failed');
+      alert('Deleted ✔'); await load();
     }
   });
-
-  // Wire UI
-  prodBtn.addEventListener('click', search);
-  prodInput.addEventListener('keydown', (e)=>{ if (e.key === 'Enter') { e.preventDefault(); search(); } });
-  $$('input[name="prodState"]').forEach(r => r.addEventListener('change', search));
 })();
+
+// ========== Product quick-delete ==========
+document.getElementById('btnDelProd')?.addEventListener('click', async () => {
+  const pn = (document.getElementById('delProdNum')?.value || '').trim().toLowerCase();
+  if (!pn) return alert('Enter product_num');
+  if (!confirm(`Delete product ${pn}?`)) return;
+  const r = await fetch(`/api/admin/products/${encodeURIComponent(pn)}`, {
+    method:'DELETE', credentials:'include'
+  });
+  const j = await r.json();
+  if (!r.ok) return alert(j?.error||'Delete failed');
+  alert('Deleted ✔');
+});
+
+// ---------- whoami banner ----------
+(async () => {
+  try {
+    const r = await fetch('/api/admin/whoami', { credentials: 'include', cache: 'no-store' });
+    const { user } = await r.json();
+    const el = $('#whoami');
+    if (el && user) el.textContent = `You are logged in as ${user}`;
+  } catch (_) {}
+})();
+
+// ---------- TEST FETCH CARD ----------
+const testForm = $('#testFetchForm');
+const testInput = $('#testFetchInput');
+const testOut = $('#testFetchOut');
+
+testForm?.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const input = (testInput?.value || '').trim();
+  if (!input) { alert('Paste an Amazon URL or a 10-char ASIN'); return; }
+
+  testOut.innerHTML = '<small>Fetching…</small>';
+
+  const { ok, status, json, text } = await fetchJSON('/api/admin/amazon-fetch', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ input }),
+  });
+
+  if (!ok) {
+    const msg = json?.error?.message || json?.error || text || 'Unknown error';
+    testOut.innerHTML = `<small style="color:#a00">Error ${status}: ${esc(msg)}</small>`;
+    log('test-fetch ERROR', { status, msg, json });
+    return;
+  }
+
+  const s = json.scraped || {};
+  log('test-fetch OK (scraped)', s);
+
+  const asin = extractASIN(s.affiliate_link || input);
+  const image = s.image_main || s.image_small || '';
+  const title = s.amazon_title || '';
+  const cat   = s.amazon_category || '';
+
+  testOut.innerHTML = `
+    <div style="display:grid;grid-template-columns:120px 1fr;gap:12px;align-items:start">
+      <div>
+        ${image ? `<img src="${esc(image)}" alt="" style="max-width:120px;border:1px solid #eee;border-radius:8px;background:#fff">` : '<div class="muted"><small>No image</small></div>'}
+      </div>
+      <div>
+        <div><b>Title:</b> ${esc(title || '—')}</div>
+        <div><b>ASIN:</b> <code>${esc(asin || '—')}</code></div>
+        <div><b>Category:</b> ${esc(cat || '—')}</div>
+        <div><b>Image URL:</b> ${image ? `<a href="${esc(image)}" target="_blank" rel="noopener">open</a>` : '—'}</div>
+        <div><b>Affiliate Link:</b> ${s.affiliate_link ? `<a href="${esc(s.affiliate_link)}" target="_blank" rel="noopener">open</a>` : esc(input)}</div>
+      </div>
+    </div>
+// ===== Archived Products (restore) =====
+(async function archivedManager(){
+  const box = document.getElementById('archivedBox');
+  if (!box) return;
+
+  async function load() {
+    const r = await fetch('/api/admin/products/list?archived=1&limit=200', {
+      credentials:'include', cache:'no-store'
+    });
+    const j = await r.json();
+    if (!r.ok) { box.innerHTML = `<small style="color:#a00">${j?.error||'Error loading'}</small>`; return; }
+    const items = Array.isArray(j.items) ? j.items : [];
+    if (!items.length) { box.innerHTML = `<small>Nothing archived.</small>`; return; }
+
+    box.innerHTML = items.map(p => `
+      <div class="row" style="gap:8px;align-items:center;margin:.3rem 0" data-pn="${p.product_num}">
+        <img src="${(p.image_main||'').replace(/"/g,'&quot;')}" alt="" style="width:48px;height:48px;object-fit:cover;border-radius:6px;border:1px solid #eee">
+        <div style="flex:1;min-width:0">
+          <div style="font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${(p.my_title||p.amazon_title||'').replace(/</g,'&lt;')}</div>
+          <div class="muted"><code>${p.product_num}</code>${p.amazon_category?` • ${p.amazon_category}`:''}</div>
+        </div>
+        <button class="btn-restore">Restore</button>
+      </div>
+    `).join('');
+  }
+  await load();
+
+  box.addEventListener('click', async (e) => {
+    if (!e.target.classList.contains('btn-restore')) return;
+    const row = e.target.closest('[data-pn]'); if (!row) return;
+    const pn = row.dataset.pn;
+    const r = await fetch(`/api/admin/products/${encodeURIComponent(pn)}/archive`, {
+      method:'POST', credentials:'include',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ restore: 1 })
+    });
+    const j = await r.json();
+    if (!r.ok) { alert(j?.error||'Restore failed'); return; }
+    row.remove();
+  });
+})();
+
+    <details style="margin-top:.5rem">
+      <summary>Raw JSON</summary>
+      <pre style="white-space:pre-wrap;background:#fff;border:1px solid #eee;border-radius:8px;padding:8px;margin-top:.5rem">${esc(JSON.stringify(s, null, 2))}</pre>
+    </details>
+
+    <div style="margin-top:.5rem">
+      <a class="btn small" href="/admin/add-product.html?link=${encodeURIComponent(input)}" target="_blank" rel="noopener">Open “Add Product”</a>
+    </div>
+  `;
+});
