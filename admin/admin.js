@@ -1,5 +1,4 @@
 /* ---- admin/admin.js ---- */
-// /admin/admin.js
 // Minimal client: validate, normalize, debug (optional), and POST to our Pages Function.
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -66,7 +65,6 @@ document.addEventListener('DOMContentLoaded', () => {
       alert('Main image URL must be a valid http(s) URL'); return;
     }
     // Affiliate link is OPTIONAL, but if present it must be Amazon (amzn.to or amazon.*)
-    // Preserve EXACT text user typed (Sitestripe short links are fine)
     data.affiliate_link = (document.getElementById('affiliate_link')?.value || '').trim();
     if (data.affiliate_link && !isAmazon(data.affiliate_link)) {
       alert('Affiliate link must be amzn.to or an amazon.* URL'); return;
@@ -74,6 +72,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Coerce types the backend expects
     data.approved = !!fd.get('approved');
+
     if (data.commission_l !== '' && data.commission_l != null) {
       const n = Number(data.commission_l);
       data.commission_l = Number.isFinite(n) ? n : null;
@@ -86,10 +85,13 @@ document.addEventListener('DOMContentLoaded', () => {
     try {
       const res = await fetch('/api/admin/product-upsert', {
         method: 'POST',
+        credentials: 'include',                      // carry auth cookies, if any
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data)
       });
-      const json = await res.json();
+      const text = await res.text();
+      let json;
+      try { json = JSON.parse(text); } catch { throw new Error(text.slice(0,160)); }
       showDebug('Server reply', json);
 
       if (!res.ok) {
