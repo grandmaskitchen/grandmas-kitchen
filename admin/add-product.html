@@ -89,6 +89,12 @@
       <div id="testFetchOut" style="margin-top:.5rem"></div>
     </section>
   </div>
+  
+fetch('/api/admin/amazon-fetch', {
+  method:'POST', credentials:'include',
+  headers:{'Content-Type':'application/json'},
+  body: JSON.stringify({ input: 'B000123456' }) // or a real URL/ASIN
+}).then(r=>r.text()).then(t=>console.log(t));
 
   <!-- Amazon fetch wiring + integrated preview -->
 <script>
