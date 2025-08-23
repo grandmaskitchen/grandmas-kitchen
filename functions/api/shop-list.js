@@ -27,7 +27,7 @@ export const onRequestGet = async ({ request, env }) => {
     ].join(','));
 
     sb.searchParams.set('approved', 'eq.true');
-    sb.searchParams.set('archived_at', 'is.null');          // hide archived
+    sb.searchParams.set('archived_at', 'is.null');          // hide archived items
     sb.searchParams.set('order', 'updated_at.desc');
     sb.searchParams.set('limit', String(limit));
 
