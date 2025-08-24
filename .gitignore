@@ -1,0 +1,8 @@
+# macOS
+.DS_Store
+
+# local archives / backups
+archive/
+*.zip
+*.tar.gz
+backup.zsh
