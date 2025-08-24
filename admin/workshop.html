@@ -6,14 +6,16 @@
   <title>Workshop • Admin</title>
   <meta name="robots" content="noindex,nofollow"/>
   <style>
+    :root{--green:#44633F}
+    *{box-sizing:border-box}
     body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;background:#fffdf8;color:#222;margin:0}
     header,main{max-width:960px;margin:0 auto;padding:16px}
     h1{margin:8px 0 4px}
     .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px;margin-top:12px}
     .card{background:#fff;padding:14px;border-radius:10px;box-shadow:0 2px 8px rgba(0,0,0,.06)}
-    .card h2{font-size:1.05rem;margin:0 0 .5rem}
-    button, a.btn{background:#44633F;color:#fff;border:0;border-radius:8px;padding:.6rem .9rem;cursor:pointer;text-decoration:none;display:inline-block}
-    button.secondary{background:#ddd;color:#222}
+    .card h2,.card h3{font-size:1.05rem;margin:0 0 .5rem}
+    button, a.btn{background:var(--green);color:#fff;border:0;border-radius:8px;padding:.6rem .9rem;cursor:pointer;text-decoration:none;display:inline-block}
+    button.secondary,.btn.secondary{background:#ddd;color:#222}
     .muted{color:#666}
     pre{background:#111;color:#0f0;padding:10px;border-radius:8px;overflow:auto;max-height:280px}
     .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
@@ -26,22 +28,37 @@
     .pill{display:inline-block;background:#eef3ee;color:#2f5130;border-radius:999px;padding:.15rem .5rem;font-size:.8rem}
     .btn-danger{background:#b33}
     .btn-quiet{background:#ddd;color:#222}
-    input[type="text"]{flex:1;min-width:220px;padding:.55rem .6rem;border:1px solid #cfcfcf;border-radius:8px;font-size:1rem}
+    input[type="text"],input[type="url"],textarea,select{flex:1;min-width:220px;padding:.55rem .6rem;border:1px solid #cfcfcf;border-radius:8px;font-size:1rem}
+    code{background:#f5f5f5;border-radius:4px;padding:0 .25rem}
+    .hint{font-size:.85rem}
   </style>
 </head>
 <body>
   <header>
     <h1>🔧 Workshop</h1>
     <p id="whoami" class="muted" style="margin-top:.25rem"></p>
-    <p class="muted">Daily ops: diagnostics, backups, picks, categories, quick deletes.</p>
+    <p class="muted">Daily ops: diagnostics, picks, categories, archive/delete, quick tools.</p>
   </header>
 
   <main class="grid">
+
+    <!-- Test Fetch (Amazon URL/ASIN) -->
+    <section class="card">
+      <h2>Test fetch</h2>
+      <form id="testFetchForm" class="row" style="margin:0 0 .5rem 0">
+        <input id="testFetchInput" type="text" placeholder="Paste Amazon URL or ASIN (e.g. B07XYZ1234)" aria-label="Amazon URL or ASIN"/>
+        <button id="btnTestFetch" type="submit">Run</button>
+      </form>
+      <div id="testFetchOut" class="muted" style="min-height:60px">
+        <small>Try a full amazon.co.uk URL, an amzn.to link, or a raw ASIN.</small>
+      </div>
+    </section>
+
     <!-- Products — Archive / Delete -->
     <section class="card" style="grid-column:1/-1">
       <h2>Products — Archive / Delete</h2>
       <div class="row" style="margin-bottom:.4rem">
-        <input id="prodSearch" type="text" placeholder="Search title, category, or product_num…">
+        <input id="prodSearch" type="text" placeholder="Search title, category, or product_num…" aria-label="Search products">
         <button id="prodSearchBtn" type="button">Search</button>
         <label><input type="radio" name="prodState" value="active"> Active</label>
         <label><input type="radio" name="prodState" value="archived"> Archived</label>
@@ -69,11 +86,46 @@
       </p>
     </section>
 
+    <!-- Category Manager -->
+    <section class="card">
+      <h2>Category Manager</h2>
+      <div id="catMgr"><small class="muted">Loading…</small></div>
+      <p class="hint muted" style="margin-top:.5rem">Rename, delete (optionally reassign), or create from the Add Product page.</p>
+    </section>
+
+    <!-- Product Tools -->
+    <section class="card">
+      <h2>Product Tools</h2>
+      <div id="prodTools" class="row">
+        <input id="delProdNum" placeholder="product_num (e.g. b00abc1234)" aria-label="Product number">
+        <button id="btnDelProd" class="btn-danger" type="button">Delete product</button>
+      </div>
+      <p class="muted hint" style="margin-top:.5rem">For quick hard deletes when a product/image is broken.</p>
+    </section>
+
+    <!-- Archived Products (restore) -->
+    <section class="card" style="grid-column:1/-1">
+      <h2>Archived Products</h2>
+      <div id="archivedBox"><small>Loading…</small></div>
+    </section>
+
+    <!-- Shortcuts -->
+    <section class="card">
+      <h2>Shortcuts</h2>
+      <div class="row">
+        <a class="btn secondary" href="/admin/add-product.html" target="_blank" rel="noopener">Add product</a>
+        <a class="btn secondary" href="/api/diag" target="_blank" rel="noopener">/api/diag</a>
+        <a class="btn secondary" href="/api/shop-list" target="_blank" rel="noopener">/api/shop-list</a>
+        <a class="btn secondary" href="/shop.html" target="_blank" rel="noopener">View shop</a>
+      </div>
+    </section>
+
     <!-- Debug -->
     <section class="card">
       <h2>Debug</h2>
-      <pre id="debugBox">(nothing yet)</pre>
+      <pre id="debugBox" aria-live="polite">(nothing yet)</pre>
     </section>
+
   </main>
 
   <script src="/admin/workshop.js" defer></script>
