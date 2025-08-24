@@ -1,6 +1,7 @@
-// /functions/api/admin/categories.js
-// GET  /api/admin/categories        -> { items:[{id,name,slug}, ...] }
-// POST /api/admin/categories {name} -> { ok:true, category:{...} }  (upsert by slug)
+// /functions/api/admin/categories.js — v2 (adds include=count)
+// GET  /api/admin/categories                -> { items:[{id,name,slug}] }
+// GET  /api/admin/categories?include=count  -> { items:[{id,name,slug,count}] }
+// POST /api/admin/categories {name}         -> { ok:true, category:{...} }  (upsert by slug)
 
 export const onRequestOptions = ({ request }) =>
   new Response(null, {
@@ -15,6 +16,11 @@ export const onRequestOptions = ({ request }) =>
 
 export const onRequestGet = async ({ env, request }) => {
   try {
+    const reqURL = new URL(request.url);
+    const include = (reqURL.searchParams.get("include") || "").toLowerCase();
+    const wantCount = include.split(",").map(s => s.trim()).includes("count");
+
+    // 1) base list
     const u = new URL(`${env.SUPABASE_URL}/rest/v1/categories`);
     u.searchParams.set("select", "id,name,slug");
     u.searchParams.set("order", "name.asc");
@@ -25,9 +31,17 @@ export const onRequestGet = async ({ env, request }) => {
         Authorization: `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}`,
       },
     });
+
     if (!r.ok) return json({ error: "Supabase list failed" }, 500, request);
-    const rows = await r.json();
-    return json({ items: rows || [] }, 200, request);
+    const rows = (await r.json()) || [];
+    if (!wantCount) return json({ items: rows }, 200, request);
+
+    // 2) enrich with counts (products per category_id)
+    const items = await Promise.all(
+      rows.map(async (c) => ({ ...c, count: await countForCategory(env, c.id) }))
+    );
+
+    return json({ items }, 200, request);
   } catch (e) {
     return json({ error: e?.message || "Server error" }, 500, request);
   }
@@ -85,6 +99,26 @@ export const onRequestPost = async ({ request, env }) => {
     return json({ error: e?.message || "Server error" }, 500, request);
   }
 };
+
+// ---- helpers ----
+async function countForCategory(env, catId) {
+  const url = new URL(`${env.SUPABASE_URL}/rest/v1/products`);
+  url.searchParams.set("select", "id");
+  url.searchParams.set("category_id", `eq.${catId}`);
+  url.searchParams.set("limit", "0");
+
+  const r = await fetch(url.toString(), {
+    headers: {
+      apikey: env.SUPABASE_SERVICE_ROLE_KEY,
+      Authorization: `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}`,
+      Prefer: "count=exact",
+    },
+  });
+  // Content-Range: 0-0/42
+  const range = r.headers.get("Content-Range") || "";
+  const m = range.match(/\/(\d+)$/);
+  return m ? Number(m[1]) : 0;
+}
 
 function json(obj, status = 200, request) {
   const origin = request?.headers?.get?.("Origin") || "*";
