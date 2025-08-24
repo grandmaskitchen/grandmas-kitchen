@@ -1,4 +1,4 @@
-/* ---- admin/workshop.js (v2) ---- */
+/* ---- admin/workshop.js — v3 (compact categories, counts, pagination, inline editor) ---- */
 
 // ---------- tiny helpers ----------
 const $  = (sel) => document.querySelector(sel);
@@ -15,7 +15,7 @@ async function fetchJSON(url, opts = {}) {
   const r = await fetch(url, { credentials: 'include', cache: 'no-store', ...opts });
   const text = await r.text();
   let json; try { json = JSON.parse(text); } catch { json = { raw: text }; }
-  return { ok: r.ok, status: r.status, headers: r.headers, json, text };
+  return { ok: r.ok, status: r.status, json, text, headers: r.headers };
 }
 
 function esc(s) {
@@ -27,10 +27,7 @@ function extractASIN(s) {
   if (/^[A-Z0-9]{10}$/i.test(str)) return str.toUpperCase();
   try {
     const u = new URL(str, 'https://x.invalid');
-    const m =
-      u.pathname.match(/\/dp\/([A-Z0-9]{10})/i) ||
-      u.pathname.match(/\/gp\/product\/([A-Z0-9]{10})/i) ||
-      u.search.match(/[?&]asin=([A-Z0-9]{10})/i);
+    const m = u.pathname.match(/\/dp\/([A-Z0-9]{10})/i) || u.pathname.match(/\/gp\/product\/([A-Z0-9]{10})/i) || u.search.match(/[?&]asin=([A-Z0-9]{10})/i);
     return (m && m[1] && m[1].toUpperCase()) || '';
   } catch { return ''; }
 }
@@ -39,176 +36,207 @@ function extractASIN(s) {
 (async () => {
   try {
     const r = await fetch('/api/admin/whoami', { credentials: 'include', cache: 'no-store' });
-    const { user } = await r.json();
+    const j = await r.json();
     const el = $('#whoami');
-    if (el && user) el.textContent = `You are logged in as ${user}`;
+    if (el && j && j.user) el.textContent = `You are logged in as ${j.user}`;
   } catch (_) {}
 })();
 
-// ========== Backups (Dedicated Card) ==========
-(function backupCard(){
-  const card      = $('#backup-card');
-  if (!card) return; // not on this page
-
-  const tableSel  = $('#backup-table');
-  const runBtn    = $('#backup-now');
-  const latestEl  = $('#latest-backup');
-  const statusEl  = $('#backup-status');
-  const outEl     = $('#backup-output');
-  const copyBtn   = $('#copy-local-cmd');
-  const vhBtn     = $('#vh-run');
-  const vhUrlEl   = $('#vh-url');
-  const vhOut     = $('#vh-output');
-
-  const setStatus = (s) => statusEl && (statusEl.textContent = 'Status: ' + s);
-  const fmtBytes = (n) => {
-    if (n == null || isNaN(n)) return 'unknown';
-    const units = ['B','KB','MB','GB','TB'];
-    let i=0, v=Number(n);
-    while (v >= 1024 && i < units.length-1) { v/=1024; i++; }
-    return (v < 10 && i ? v.toFixed(1) : Math.round(v)) + ' ' + units[i];
-  };
-  const fmtWhen = (iso) => {
-    if (!iso) return 'unknown time';
-    try { const d = new Date(iso); return d.toLocaleString(); } catch { return iso; }
-  };
-
-  // Auth gate (if Basic Auth enabled in middleware)
-  (async () => {
-    try {
-      const r = await fetch('/api/admin/whoami', { headers: { 'Accept':'application/json' }, credentials:'include' });
-      if (r.status === 401 || r.status === 403) {
-        if (runBtn) { runBtn.disabled = true; runBtn.title = 'Login required'; }
-        setStatus('login required');
-      }
-    } catch {}
-  })();
-
-  async function loadLatest() {
-    if (!latestEl) return;
-    const table = (tableSel && tableSel.value) || 'products';
-    try {
-      // Prefer standardized meta shape for the selected table
-      let { ok, json } = await fetchJSON(`/api/admin/backup?format=meta&table=${encodeURIComponent(table)}`);
-      if (!ok) ({ ok, json } = await fetchJSON('/api/admin/backup'));
-      const latest = json && (json.latest || json.backup || (Array.isArray(json) ? json[0] : null));
-      if (latest) {
-        const url = latest.url || latest.download_url || latest.path || '';
-        const size = fmtBytes(latest.bytes || latest.size);
-        const when = fmtWhen(latest.updated_at || latest.timestamp || latest.created_at);
-        latestEl.innerHTML = url
-          ? `Latest: <a href="${esc(url)}" target="_blank" rel="noopener">download</a> • ${size} • ${when}`
-          : `Latest: ${size} • ${when}`;
-      } else {
-        latestEl.innerHTML = 'Latest: <em>unknown</em>';
-      }
-    } catch (e) {
-      latestEl.innerHTML = 'Latest: <em>unknown</em>';
-      log('backup latest ERROR', e);
-    }
-  }
-
-  tableSel && tableSel.addEventListener('change', loadLatest);
-  loadLatest();
-
-  // Trigger backup (download attachment for selected table)
-  runBtn && runBtn.addEventListener('click', () => {
-    const table = (tableSel && tableSel.value) || 'products';
-    const url = `/api/admin/backup?table=${encodeURIComponent(table)}&download=1`;
-    setStatus('starting download…');
-    outEl && (outEl.textContent = '');
-    window.location.href = url; // trigger browser download
-    setTimeout(loadLatest, 1500);
-    setTimeout(() => setStatus('idle'), 2000);
-  });
-
-  // Verify headers (HEAD)
-  function pickHeaders(headers) {
-    const keys = ['cache-control','pragma','expires','x-robots-tag','x-admin-mw'];
-    const lines = [];
-    for (const k of keys) {
-      const v = headers.get(k);
-      if (v) lines.push(`${k}: ${v}`);
-    }
-    return lines.join('\n') || '(no expected headers present)';
-  }
-  vhBtn && vhBtn.addEventListener('click', async () => {
-    const url = (vhUrlEl && vhUrlEl.value || '/admin/workshop.html').trim();
-    if (vhOut) vhOut.textContent = 'checking…';
-    try {
-      const res = await fetch(url, { method: 'HEAD' });
-      vhOut && (vhOut.textContent = pickHeaders(res.headers));
-    } catch (e) {
-      vhOut && (vhOut.textContent = String(e && e.message || e));
-    }
-  });
-
-  // Copy local commands
-  copyBtn && copyBtn.addEventListener('click', () => {
-    const cmd = 'cd ~/documents/github/grandmas-kitchen\n./backup.zsh\nopen "$HOME/Backups/grandmas-kitchen"';
-    navigator.clipboard.writeText(cmd).then(() => {
-      const old = copyBtn.textContent;
-      copyBtn.textContent = 'Copied!';
-      setTimeout(() => (copyBtn.textContent = old), 1200);
-    });
-  });
-})();
-
-// ========== Category Manager ==========
+// ========== Category Manager (compact + counts + pagination + inline editor) ==========
 (async function renderCategoryManager(){
   const box = document.getElementById('catMgr');
   if (!box) return;
 
-  async function load() {
-    box.innerHTML = '<small>Loading…</small>';
-    const r = await fetch('/api/admin/categories', { credentials:'include', cache:'no-store' });
-    const j = await r.json();
-    if (!r.ok) { box.innerHTML = `<small style="color:#a00">${esc(j?.error||'Error')}</small>`; return; }
-    const items = Array.isArray(j.items)? j.items : [];
-    box.innerHTML = items.map(c => `
-      <div class="row" style="align-items:center;gap:8px;margin:.3rem 0" data-id="${esc(c.id)}">
-        <input class="rename" value="${esc(c.name)}" style="flex:1">
-        <button class="save">Rename</button>
-        <select class="reassign"><option value="">— Reassign to… —</option>
-          ${items.filter(x=>x.id!==c.id).map(x=>`<option value="${esc(x.id)}">${esc(x.name)}</option>`).join('')}
-        </select>
-        <button class="del" style="background:#b33">Delete</button>
+  const PAGE = 12;
+  let items = [];
+  let filtered = [];
+  let page = 1;
+
+  // Shell UI
+  function shell(){
+    return `
+      <div class="row" style="gap:6px;align-items:center;margin-bottom:.4rem">
+        <input id="catSearch" type="text" placeholder="Filter categories…" aria-label="Filter categories" style="flex:1;min-width:120px">
+        <button id="catNew" class="btn secondary" type="button">New</button>
       </div>
-    `).join('');
+      <div class="table-wrap">
+        <table class="compact" aria-label="Categories">
+          <thead><tr><th style="width:66%">Name</th><th style="width:14%">Items</th><th style="width:20%;text-align:right">Actions</th></tr></thead>
+          <tbody id="catTbody"><tr><td colspan="3" class="muted">Loading…</td></tr></tbody>
+        </table>
+      </div>
+      <div class="row" id="catPager" style="justify-content:space-between;margin-top:.35rem">
+        <small id="catCount" class="muted">—</small>
+        <div>
+          <button id="catPrev" class="iconbtn" type="button" aria-label="Previous">◀</button>
+          <span id="catPage" class="muted" style="margin:0 .4rem">1/1</span>
+          <button id="catNext" class="iconbtn" type="button" aria-label="Next">▶</button>
+        </div>
+      </div>
+      <style>
+        #catMgr table.compact th, #catMgr table.compact td { padding:.35rem .5rem; }
+        #catMgr .iconbtn{ background:#eee; color:#222; border:0; border-radius:6px; padding:.25rem .45rem; font-size:.9rem; }
+        #catMgr .iconbtn:hover{ background:#e2e2e2; }
+        #catMgr .pill-count{display:inline-block;background:#eef3ee;color:#2f5130;border-radius:999px;padding:.05rem .4rem;font-size:.8rem}
+        #catMgr .row-edit{display:flex;gap:6px;align-items:center}
+        #catMgr .row-edit input{flex:1;min-width:80px;padding:.35rem .45rem;border:1px solid #cfcfcf;border-radius:6px}
+        #catMgr .btn-mini{background:#ddd;color:#222;border:0;border-radius:6px;padding:.25rem .5rem}
+      </style>
+    `;
   }
-  await load();
 
-  box.addEventListener('click', async (e) => {
-    const row = e.target.closest('[data-id]'); if (!row) return;
-    const id = row.dataset.id;
+  // Fetch list (optionally with counts)
+  async function fetchItemsWithCounts(){
+    // Try include=count first
+    let url = new URL('/api/admin/categories', location.origin);
+    url.searchParams.set('include', 'count');
+    const r = await fetchJSON(url.toString());
+    if (r.ok && Array.isArray(r.json.items)) return r.json.items;
 
-    // Rename
-    if (e.target.classList.contains('save')) {
-      const name = row.querySelector('.rename').value.trim();
-      if (!name) return alert('Name required');
-      const r = await fetch(`/api/admin/categories/${encodeURIComponent(id)}`, {
-        method:'PATCH',
-        credentials:'include',
-        headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({ name })
+    // Fallback without counts
+    const r2 = await fetchJSON('/api/admin/categories');
+    const items = Array.isArray(r2.json.items)? r2.json.items : [];
+    // As a last resort, show 0
+    return items.map(x => ({ ...x, count: (typeof x.count === 'number' ? x.count : null) }));
+  }
+
+  function paginate(list){
+    const total = list.length;
+    const pages = Math.max(1, Math.ceil(total / PAGE));
+    if (page > pages) page = pages;
+    const start = (page - 1) * PAGE;
+    return { total, pages, slice: list.slice(start, start + PAGE) };
+  }
+
+  function renderTable(){
+    const tbody = document.getElementById('catTbody');
+    const pageEl = document.getElementById('catPage');
+    const countEl = document.getElementById('catCount');
+    if (!tbody) return;
+    const { total, pages, slice } = paginate(filtered);
+    if (!slice.length) {
+      tbody.innerHTML = `<tr><td colspan="3" class="muted">No categories.</td></tr>`;
+    } else {
+      tbody.innerHTML = slice.map(c => `
+        <tr data-id="${esc(c.id)}" data-name="${esc(c.name)}">
+          <td class="name"><span class="nm">${esc(c.name)}</span></td>
+          <td>${typeof c.count === 'number' ? `<span class="pill-count" title="Products in this category">${c.count}</span>` : '<span class="muted">—</span>'}</td>
+          <td class="actions" style="text-align:right">
+            <button class="iconbtn edit" title="Rename" aria-label="Rename">✎</button>
+            <button class="iconbtn del" title="Delete" aria-label="Delete">🗑</button>
+          </td>
+        </tr>
+      `).join('');
+    }
+    if (pageEl) pageEl.textContent = `${page}/${Math.max(1, pages)}`;
+    if (countEl) countEl.textContent = `${total} categories`;
+    // Wire inline editor each render
+    wireInlineEditor();
+  }
+
+  function applyFilter(){
+    const q = (document.getElementById('catSearch')?.value || '').toLowerCase().trim();
+    filtered = !q ? items : items.filter(c => (c.name||'').toLowerCase().includes(q));
+    page = 1; renderTable();
+  }
+
+  function wireSkeleton(){
+    const search = document.getElementById('catSearch');
+    const newBtn = document.getElementById('catNew');
+    const prev = document.getElementById('catPrev');
+    const next = document.getElementById('catNext');
+
+    search?.addEventListener('input', applyFilter);
+
+    newBtn?.addEventListener('click', async () => {
+      const name = prompt('New category name?');
+      if (!name) return;
+      const r = await fetchJSON('/api/admin/categories', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ name: name.trim() })
       });
-      const j = await r.json();
-      if (!r.ok) return alert(j?.error||'Rename failed');
-      alert('Renamed ✔'); await load();
+      if (!r.ok) { alert(r.json?.error||'Create failed'); return; }
+      await load();
+    });
+
+    prev?.addEventListener('click', () => { if (page > 1) { page--; renderTable(); }});
+    next?.addEventListener('click', () => {
+      const pages = Math.max(1, Math.ceil(filtered.length / PAGE));
+      if (page < pages) { page++; renderTable(); }
+    });
+
+    $('#catTbody')?.addEventListener('click', onRowAction);
+  }
+
+  // Inline editor: turn a row into edit mode
+  function wireInlineEditor(){
+    $$('#catTbody tr').forEach(tr => {
+      // noop; actions are delegated in onRowAction
+    });
+  }
+
+  async function onRowAction(e){
+    const tr = e.target.closest('tr[data-id]'); if (!tr) return;
+    const id = tr.dataset.id; const current = tr.querySelector('.nm')?.textContent || '';
+
+    // Rename -> inline editor
+    if (e.target.classList.contains('edit')) {
+      tr.innerHTML = `
+        <td colspan="3">
+          <div class="row-edit">
+            <input class="edit-input" value="${esc(current)}" aria-label="Category name">
+            <button class="btn-mini save">Save</button>
+            <button class="btn-mini cancel">Cancel</button>
+          </div>
+        </td>`;
+      const input = tr.querySelector('.edit-input');
+      input?.focus();
+      tr.querySelector('.save')?.addEventListener('click', async () => {
+        const name = input.value.trim();
+        if (!name || name === current) { renderTable(); return; }
+        const r = await fetchJSON(`/api/admin/categories/${encodeURIComponent(id)}`, {
+          method:'PATCH', headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({ name })
+        });
+        if (!r.ok) { alert(r.json?.error||'Rename failed'); return; }
+        await load();
+      });
+      tr.querySelector('.cancel')?.addEventListener('click', renderTable);
+      return;
     }
 
-    // Delete (optional reassignment)
+    // Delete (optional reassignment via prompt for compactness)
     if (e.target.classList.contains('del')) {
-      const to = row.querySelector('.reassign').value || '';
-      if (!confirm(`Delete this category${to?` (reassign products first)`:''}?`)) return;
-      const url = new URL(`/api/admin/categories/${encodeURIComponent(id)}`, location.origin);
-      if (to) url.searchParams.set('reassign_to', to);
-      const r = await fetch(url.toString(), { method:'DELETE', credentials:'include' });
-      const j = await r.json();
-      if (!r.ok) return alert(j?.error||'Delete failed');
-      alert('Deleted ✔'); await load();
+      if (!confirm(`Delete "${current}"?\nYou can optionally reassign products to another category.`)) return;
+      const targetName = prompt('Reassign products to category (leave blank to not reassign):', '');
+      let url = new URL(`/api/admin/categories/${encodeURIComponent(id)}`, location.origin);
+      if (targetName) {
+        const toCat = items.find(x => (x.name||'').toLowerCase() === targetName.toLowerCase());
+        if (!toCat) { alert('No category with that name.'); return; }
+        url.searchParams.set('reassign_to', toCat.id);
+      }
+      const r = await fetchJSON(url.toString(), { method:'DELETE' });
+      if (!r.ok) { alert(r.json?.error||'Delete failed'); return; }
+      await load();
+      return;
     }
-  });
+  }
+
+  async function load(){
+    box.innerHTML = shell();
+    try {
+      items = await fetchItemsWithCounts();
+    } catch (e) {
+      box.innerHTML = `<small style="color:#a00">${esc(e.message||e)}</small>`; return;
+    }
+    filtered = items.slice();
+    wireSkeleton();
+    renderTable();
+  }
+
+  try { await load(); } catch (e) {
+    box.innerHTML = `<small style="color:#a00">${esc(e.message||e)}</small>`;
+  }
 })();
 
 // ========== Product quick-delete ==========
@@ -216,9 +244,7 @@ document.getElementById('btnDelProd')?.addEventListener('click', async () => {
   const pn = (document.getElementById('delProdNum')?.value || '').trim().toLowerCase();
   if (!pn) return alert('Enter product_num');
   if (!confirm(`Delete product ${pn}?`)) return;
-  const r = await fetch(`/api/admin/products/${encodeURIComponent(pn)}`, {
-    method:'DELETE', credentials:'include'
-  });
+  const r = await fetch(`/api/admin/products/${encodeURIComponent(pn)}`, { method:'DELETE', credentials:'include' });
   const j = await r.json();
   if (!r.ok) return alert(j?.error||'Delete failed');
   alert('Deleted ✔');
@@ -237,9 +263,7 @@ testForm?.addEventListener('submit', async (e) => {
   testOut.innerHTML = '<small>Fetching…</small>';
 
   const { ok, status, json, text } = await fetchJSON('/api/admin/amazon-fetch', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ input }),
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ input }),
   });
 
   if (!ok) {
@@ -269,8 +293,7 @@ testForm?.addEventListener('submit', async (e) => {
         <div><b>Image URL:</b> ${image ? `<a href="${esc(image)}" target="_blank" rel="noopener">open</a>` : '—'}</div>
         <div><b>Affiliate Link:</b> ${s.affiliate_link ? `<a href="${esc(s.affiliate_link)}" target="_blank" rel="noopener">open</a>` : esc(input)}</div>
       </div>
-    </div>
-  `;
+    </div>`;
 });
 
 // ========== Archived Products (restore panel) ==========
@@ -279,7 +302,6 @@ testForm?.addEventListener('submit', async (e) => {
   if (!box) return;
 
   async function load() {
-    // Use the updated endpoint that doesn't reference updated_at
     const url = new URL('/api/admin/products-search', location.origin);
     url.searchParams.set('state', 'archived');
     url.searchParams.set('limit', '200');
@@ -298,8 +320,7 @@ testForm?.addEventListener('submit', async (e) => {
           <div class="muted"><code>${esc(p.product_num || '')}</code>${p.amazon_category?` • ${esc(p.amazon_category)}`:''}</div>
         </div>
         <button class="btn-restore">Restore</button>
-      </div>
-    `).join('');
+      </div>`).join('');
   }
   await load();
 
@@ -308,9 +329,7 @@ testForm?.addEventListener('submit', async (e) => {
     const row = e.target.closest('[data-pn]'); if (!row) return;
     const pn = row.dataset.pn;
     const r = await fetch(`/api/admin/products/${encodeURIComponent(pn)}/archive`, {
-      method:'POST', credentials:'include',
-      headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ restore: 1 })
+      method:'POST', credentials:'include', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ restore: 1 })
     });
     const j = await r.json();
     if (!r.ok) { alert(j?.error||'Restore failed'); return; }
@@ -364,7 +383,6 @@ testForm?.addEventListener('submit', async (e) => {
     tbody.innerHTML = `<tr><td colspan="5" class="muted">Loading…</td></tr>`;
 
     try {
-      // IMPORTANT: use products-search (no updated_at usage)
       const url = new URL('/api/admin/products-search', location.origin);
       if (q) url.searchParams.set('q', q);
       url.searchParams.set('state', state);
@@ -395,45 +413,31 @@ testForm?.addEventListener('submit', async (e) => {
     if (!tr) return;
     const pn = tr.dataset.pn;
 
-    // Archive/Restore
     if (e.target.classList.contains('btn-archive')) {
       const restoring = e.target.textContent.toLowerCase() === 'restore';
       if (!confirm(`${restoring ? 'Restore' : 'Archive'} ${pn}?`)) return;
       e.target.disabled = true;
       try {
         const r = await fetch(`/api/admin/products/${encodeURIComponent(pn)}/archive`, {
-          method:'POST',
-          credentials:'include',
-          headers:{ 'Content-Type':'application/json' },
-          body: JSON.stringify(restoring ? { restore: 1 } : {})
+          method:'POST', credentials:'include', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify(restoring ? { restore: 1 } : {})
         });
         const j = await r.json();
         if (!r.ok) throw new Error(j?.error || 'Action failed');
-        tr.remove(); // remove from current view
-      } catch (err) {
-        alert(err?.message || err);
-      } finally {
-        e.target.disabled = false;
-      }
+        tr.remove();
+      } catch (err) { alert(err?.message || err); }
+      finally { e.target.disabled = false; }
     }
 
-    // Delete
     if (e.target.classList.contains('btn-delete')) {
       if (!confirm(`DELETE ${pn} permanently?\nThis cannot be undone.`)) return;
       e.target.disabled = true;
       try {
-        const r = await fetch(`/api/admin/products/${encodeURIComponent(pn)}`, {
-          method:'DELETE',
-          credentials:'include'
-        });
+        const r = await fetch(`/api/admin/products/${encodeURIComponent(pn)}`, { method:'DELETE', credentials:'include' });
         const j = await r.json();
         if (!r.ok) throw new Error(j?.error || 'Delete failed');
         tr.remove();
-      } catch (err) {
-        alert(err?.message || err);
-      } finally {
-        e.target.disabled = false;
-      }
+      } catch (err) { alert(err?.message || err); }
+      finally { e.target.disabled = false; }
     }
   });
 
@@ -442,6 +446,5 @@ testForm?.addEventListener('submit', async (e) => {
   input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); search(); } });
   $$('input[name="prodState"]').forEach(r => r.addEventListener('change', search));
 
-  // Optional: auto-search if prefilled
   if ((input.value || '').trim()) search();
 })();
