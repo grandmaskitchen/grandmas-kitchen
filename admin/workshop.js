@@ -1,7 +1,8 @@
 /* ---- admin/workshop.js ---- */
 
 // ---------- tiny helpers ----------
-const $ = (sel) => document.querySelector(sel);
+const $  = (sel) => document.querySelector(sel);
+const $$ = (sel) => Array.from(document.querySelectorAll(sel));
 const debugBox = $('#debugBox');
 
 function log(title, obj) {
@@ -35,6 +36,17 @@ function extractASIN(s) {
     return (m && m[1] && m[1].toUpperCase()) || '';
   } catch { return ''; }
 }
+
+// ---------- whoami banner ----------
+(async () => {
+  try {
+    const r = await fetch('/api/admin/whoami', { credentials: 'include', cache: 'no-store' });
+    const { user } = await r.json();
+    const el = $('#whoami');
+    if (el && user) el.textContent = `You are logged in as ${user}`;
+  } catch (_) {}
+})();
+
 // ========== Category Manager ==========
 (async function renderCategoryManager(){
   const box = document.getElementById('catMgr');
@@ -105,20 +117,10 @@ document.getElementById('btnDelProd')?.addEventListener('click', async () => {
   alert('Deleted ✔');
 });
 
-// ---------- whoami banner ----------
-(async () => {
-  try {
-    const r = await fetch('/api/admin/whoami', { credentials: 'include', cache: 'no-store' });
-    const { user } = await r.json();
-    const el = $('#whoami');
-    if (el && user) el.textContent = `You are logged in as ${user}`;
-  } catch (_) {}
-})();
-
 // ---------- TEST FETCH CARD ----------
-const testForm = $('#testFetchForm');
+const testForm  = $('#testFetchForm');
 const testInput = $('#testFetchInput');
-const testOut = $('#testFetchOut');
+const testOut   = $('#testFetchOut');
 
 testForm?.addEventListener('submit', async (e) => {
   e.preventDefault();
@@ -143,14 +145,10 @@ testForm?.addEventListener('submit', async (e) => {
   const s = json.scraped || {};
   log('test-fetch OK (scraped)', s);
 
-  const asin = extractASIN(s.affiliate_link || input);
+  const asin  = extractASIN(s.affiliate_link || input);
   const image = s.image_main || s.image_small || '';
   const title = s.amazon_title || '';
   const cat   = s.amazon_category || '';
-  
-// ===== Update admin/workshop.js to call the new endpoint: =====
-  - const url = new URL('/api/admin/products', location.origin);
-  + const url = new URL('/api/admin/products-search', location.origin);
 
   testOut.innerHTML = `
     <div style="display:grid;grid-template-columns:120px 1fr;gap:12px;align-items:start">
@@ -165,26 +163,32 @@ testForm?.addEventListener('submit', async (e) => {
         <div><b>Affiliate Link:</b> ${s.affiliate_link ? `<a href="${esc(s.affiliate_link)}" target="_blank" rel="noopener">open</a>` : esc(input)}</div>
       </div>
     </div>
-// ===== Archived Products (restore) =====
+  `;
+});
+
+// ========== Archived Products (restore panel) ==========
 (async function archivedManager(){
   const box = document.getElementById('archivedBox');
   if (!box) return;
 
   async function load() {
-    const r = await fetch('/api/admin/products/list?archived=1&limit=200', {
-      credentials:'include', cache:'no-store'
-    });
-    const j = await r.json();
-    if (!r.ok) { box.innerHTML = `<small style="color:#a00">${j?.error||'Error loading'}</small>`; return; }
-    const items = Array.isArray(j.items) ? j.items : [];
+    // Use the updated endpoint that doesn't reference updated_at
+    const url = new URL('/api/admin/products-search', location.origin);
+    url.searchParams.set('state', 'archived');
+    url.searchParams.set('limit', '200');
+
+    const { ok, json } = await fetchJSON(url.toString());
+    if (!ok) { box.innerHTML = `<small style="color:#a00">${esc(json?.error || 'Error loading')}</small>`; return; }
+
+    const items = Array.isArray(json.items) ? json.items : [];
     if (!items.length) { box.innerHTML = `<small>Nothing archived.</small>`; return; }
 
     box.innerHTML = items.map(p => `
-      <div class="row" style="gap:8px;align-items:center;margin:.3rem 0" data-pn="${p.product_num}">
-        <img src="${(p.image_main||'').replace(/"/g,'&quot;')}" alt="" style="width:48px;height:48px;object-fit:cover;border-radius:6px;border:1px solid #eee">
+      <div class="row" style="gap:8px;align-items:center;margin:.3rem 0" data-pn="${esc(p.product_num)}">
+        <img src="${esc(p.image_main || '')}" alt="" style="width:48px;height:48px;object-fit:cover;border-radius:6px;border:1px solid #eee">
         <div style="flex:1;min-width:0">
-          <div style="font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${(p.my_title||p.amazon_title||'').replace(/</g,'&lt;')}</div>
-          <div class="muted"><code>${p.product_num}</code>${p.amazon_category?` • ${p.amazon_category}`:''}</div>
+          <div style="font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(p.my_title || p.amazon_title || '')}</div>
+          <div class="muted"><code>${esc(p.product_num || '')}</code>${p.amazon_category?` • ${esc(p.amazon_category)}`:''}</div>
         </div>
         <button class="btn-restore">Restore</button>
       </div>
@@ -207,13 +211,130 @@ testForm?.addEventListener('submit', async (e) => {
   });
 })();
 
-    <details style="margin-top:.5rem">
-      <summary>Raw JSON</summary>
-      <pre style="white-space:pre-wrap;background:#fff;border:1px solid #eee;border-radius:8px;padding:8px;margin-top:.5rem">${esc(JSON.stringify(s, null, 2))}</pre>
-    </details>
+// ========== Products — Archive / Delete (search + actions) ==========
+(function productsArchiveDelete() {
+  const input = $('#prodSearch');
+  const btn   = $('#prodSearchBtn');
+  const tbody = $('#prodTbody');
 
-    <div style="margin-top:.5rem">
-      <a class="btn small" href="/admin/add-product.html?link=${encodeURIComponent(input)}" target="_blank" rel="noopener">Open “Add Product”</a>
-    </div>
-  `;
-});
+  if (!input || !btn || !tbody) return; // section not on page
+
+  const fmtDate = (s) => {
+    if (!s) return '';
+    const d = new Date(s);
+    return isFinite(d) ? d.toLocaleDateString(undefined,{year:'2-digit',month:'short',day:'2-digit'}) : s;
+  };
+
+  function stateVal() {
+    const picked = $$('input[name="prodState"]').find(r => r.checked);
+    return picked ? picked.value : 'all';
+  }
+
+  function rowHtml(p) {
+    const title = p.my_title || p.amazon_title || '(untitled)';
+    const cat   = p.amazon_category || '';
+    const pn    = p.product_num || '';
+    const img   = p.image_main ? `<img src="${esc(p.image_main)}" alt="" style="width:36px;height:36px;object-fit:cover;border-radius:6px;border:1px solid #eee;margin-right:8px">` : '';
+    const active = !p.archived_at;
+
+    return `<tr data-pn="${esc(pn)}">
+      <td><div class="row" style="align-items:center">${img}<div style="font-weight:600">${esc(title)}</div></div></td>
+      <td>${cat ? `<span class="pill">${esc(cat)}</span>` : ''}</td>
+      <td><code>${esc(pn)}</code></td>
+      <td>${fmtDate(p.updated_at || p.created_at)}</td>
+      <td class="actions">
+        <button class="btn-quiet btn-archive" title="${active ? 'Archive' : 'Restore'}">${active ? 'Archive' : 'Restore'}</button>
+        <button class="btn-danger btn-delete"  title="Delete permanently">Delete</button>
+      </td>
+    </tr>`;
+  }
+
+  async function search() {
+    const q = (input.value || '').trim();
+    const state = stateVal();
+
+    btn.disabled = true;
+    tbody.innerHTML = `<tr><td colspan="5" class="muted">Loading…</td></tr>`;
+
+    try {
+      // IMPORTANT: use products-search (no updated_at usage)
+      const url = new URL('/api/admin/products-search', location.origin);
+      if (q) url.searchParams.set('q', q);
+      url.searchParams.set('state', state);
+      url.searchParams.set('limit', '100');
+
+      const { ok, status, json, text } = await fetchJSON(url.toString());
+      if (!ok) throw new Error(json?.error || text || `HTTP ${status}`);
+
+      const items = Array.isArray(json.items) ? json.items : [];
+      log('products search', { state, q, count: items.length });
+
+      if (!items.length) {
+        tbody.innerHTML = `<tr><td colspan="5" class="muted">No matches.</td></tr>`;
+        return;
+      }
+      tbody.innerHTML = items.map(rowHtml).join('');
+    } catch (e) {
+      tbody.innerHTML = `<tr><td colspan="5" class="muted" style="color:#a00">Error: ${esc(e.message || e)}</td></tr>`;
+      log('products search ERROR', e);
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  // Actions: Archive/Restore/Delete
+  tbody.addEventListener('click', async (e) => {
+    const tr = e.target.closest('tr[data-pn]');
+    if (!tr) return;
+    const pn = tr.dataset.pn;
+
+    // Archive/Restore
+    if (e.target.classList.contains('btn-archive')) {
+      const restoring = e.target.textContent.toLowerCase() === 'restore';
+      if (!confirm(`${restoring ? 'Restore' : 'Archive'} ${pn}?`)) return;
+      e.target.disabled = true;
+      try {
+        const r = await fetch(`/api/admin/products/${encodeURIComponent(pn)}/archive`, {
+          method:'POST',
+          credentials:'include',
+          headers:{ 'Content-Type':'application/json' },
+          body: JSON.stringify(restoring ? { restore: 1 } : {})
+        });
+        const j = await r.json();
+        if (!r.ok) throw new Error(j?.error || 'Action failed');
+        tr.remove(); // remove from current view
+      } catch (err) {
+        alert(err?.message || err);
+      } finally {
+        e.target.disabled = false;
+      }
+    }
+
+    // Delete
+    if (e.target.classList.contains('btn-delete')) {
+      if (!confirm(`DELETE ${pn} permanently?\nThis cannot be undone.`)) return;
+      e.target.disabled = true;
+      try {
+        const r = await fetch(`/api/admin/products/${encodeURIComponent(pn)}`, {
+          method:'DELETE',
+          credentials:'include'
+        });
+        const j = await r.json();
+        if (!r.ok) throw new Error(j?.error || 'Delete failed');
+        tr.remove();
+      } catch (err) {
+        alert(err?.message || err);
+      } finally {
+        e.target.disabled = false;
+      }
+    }
+  });
+
+  // Wire controls
+  btn.addEventListener('click', search);
+  input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); search(); } });
+  $$('input[name="prodState"]').forEach(r => r.addEventListener('change', search));
+
+  // Optional: auto-search if prefilled
+  if ((input.value || '').trim()) search();
+})();
