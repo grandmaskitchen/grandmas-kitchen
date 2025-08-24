@@ -1,4 +1,4 @@
-/* ---- admin/workshop.js ---- */
+/* ---- admin/workshop.js (v2) ---- */
 
 // ---------- tiny helpers ----------
 const $  = (sel) => document.querySelector(sel);
@@ -6,9 +6,7 @@ const $$ = (sel) => Array.from(document.querySelectorAll(sel));
 const debugBox = $('#debugBox');
 
 function log(title, obj) {
-  const line =
-    `\n\n=== ${title} ===\n` +
-    (typeof obj === 'string' ? obj : JSON.stringify(obj, null, 2));
+  const line = `\n\n=== ${title} ===\n` + (typeof obj === 'string' ? obj : JSON.stringify(obj, null, 2));
   if (debugBox) debugBox.textContent += line;
   try { console.log(title, obj); } catch {}
 }
@@ -17,11 +15,11 @@ async function fetchJSON(url, opts = {}) {
   const r = await fetch(url, { credentials: 'include', cache: 'no-store', ...opts });
   const text = await r.text();
   let json; try { json = JSON.parse(text); } catch { json = { raw: text }; }
-  return { ok: r.ok, status: r.status, json, text };
+  return { ok: r.ok, status: r.status, headers: r.headers, json, text };
 }
 
 function esc(s) {
-  return String(s ?? '').replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m]));
+  return String(s ?? '').replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#39;'}[m]));
 }
 function extractASIN(s) {
   if (!s) return '';
@@ -47,6 +45,115 @@ function extractASIN(s) {
   } catch (_) {}
 })();
 
+// ========== Backups (Dedicated Card) ==========
+(function backupCard(){
+  const card      = $('#backup-card');
+  if (!card) return; // not on this page
+
+  const tableSel  = $('#backup-table');
+  const runBtn    = $('#backup-now');
+  const latestEl  = $('#latest-backup');
+  const statusEl  = $('#backup-status');
+  const outEl     = $('#backup-output');
+  const copyBtn   = $('#copy-local-cmd');
+  const vhBtn     = $('#vh-run');
+  const vhUrlEl   = $('#vh-url');
+  const vhOut     = $('#vh-output');
+
+  const setStatus = (s) => statusEl && (statusEl.textContent = 'Status: ' + s);
+  const fmtBytes = (n) => {
+    if (n == null || isNaN(n)) return 'unknown';
+    const units = ['B','KB','MB','GB','TB'];
+    let i=0, v=Number(n);
+    while (v >= 1024 && i < units.length-1) { v/=1024; i++; }
+    return (v < 10 && i ? v.toFixed(1) : Math.round(v)) + ' ' + units[i];
+  };
+  const fmtWhen = (iso) => {
+    if (!iso) return 'unknown time';
+    try { const d = new Date(iso); return d.toLocaleString(); } catch { return iso; }
+  };
+
+  // Auth gate (if Basic Auth enabled in middleware)
+  (async () => {
+    try {
+      const r = await fetch('/api/admin/whoami', { headers: { 'Accept':'application/json' }, credentials:'include' });
+      if (r.status === 401 || r.status === 403) {
+        if (runBtn) { runBtn.disabled = true; runBtn.title = 'Login required'; }
+        setStatus('login required');
+      }
+    } catch {}
+  })();
+
+  async function loadLatest() {
+    if (!latestEl) return;
+    const table = (tableSel && tableSel.value) || 'products';
+    try {
+      // Prefer standardized meta shape for the selected table
+      let { ok, json } = await fetchJSON(`/api/admin/backup?format=meta&table=${encodeURIComponent(table)}`);
+      if (!ok) ({ ok, json } = await fetchJSON('/api/admin/backup'));
+      const latest = json && (json.latest || json.backup || (Array.isArray(json) ? json[0] : null));
+      if (latest) {
+        const url = latest.url || latest.download_url || latest.path || '';
+        const size = fmtBytes(latest.bytes || latest.size);
+        const when = fmtWhen(latest.updated_at || latest.timestamp || latest.created_at);
+        latestEl.innerHTML = url
+          ? `Latest: <a href="${esc(url)}" target="_blank" rel="noopener">download</a> • ${size} • ${when}`
+          : `Latest: ${size} • ${when}`;
+      } else {
+        latestEl.innerHTML = 'Latest: <em>unknown</em>';
+      }
+    } catch (e) {
+      latestEl.innerHTML = 'Latest: <em>unknown</em>';
+      log('backup latest ERROR', e);
+    }
+  }
+
+  tableSel && tableSel.addEventListener('change', loadLatest);
+  loadLatest();
+
+  // Trigger backup (download attachment for selected table)
+  runBtn && runBtn.addEventListener('click', () => {
+    const table = (tableSel && tableSel.value) || 'products';
+    const url = `/api/admin/backup?table=${encodeURIComponent(table)}&download=1`;
+    setStatus('starting download…');
+    outEl && (outEl.textContent = '');
+    window.location.href = url; // trigger browser download
+    setTimeout(loadLatest, 1500);
+    setTimeout(() => setStatus('idle'), 2000);
+  });
+
+  // Verify headers (HEAD)
+  function pickHeaders(headers) {
+    const keys = ['cache-control','pragma','expires','x-robots-tag','x-admin-mw'];
+    const lines = [];
+    for (const k of keys) {
+      const v = headers.get(k);
+      if (v) lines.push(`${k}: ${v}`);
+    }
+    return lines.join('\n') || '(no expected headers present)';
+  }
+  vhBtn && vhBtn.addEventListener('click', async () => {
+    const url = (vhUrlEl && vhUrlEl.value || '/admin/workshop.html').trim();
+    if (vhOut) vhOut.textContent = 'checking…';
+    try {
+      const res = await fetch(url, { method: 'HEAD' });
+      vhOut && (vhOut.textContent = pickHeaders(res.headers));
+    } catch (e) {
+      vhOut && (vhOut.textContent = String(e && e.message || e));
+    }
+  });
+
+  // Copy local commands
+  copyBtn && copyBtn.addEventListener('click', () => {
+    const cmd = 'cd ~/documents/github/grandmas-kitchen\n./backup.zsh\nopen "$HOME/Backups/grandmas-kitchen"';
+    navigator.clipboard.writeText(cmd).then(() => {
+      const old = copyBtn.textContent;
+      copyBtn.textContent = 'Copied!';
+      setTimeout(() => (copyBtn.textContent = old), 1200);
+    });
+  });
+})();
+
 // ========== Category Manager ==========
 (async function renderCategoryManager(){
   const box = document.getElementById('catMgr');
@@ -56,14 +163,14 @@ function extractASIN(s) {
     box.innerHTML = '<small>Loading…</small>';
     const r = await fetch('/api/admin/categories', { credentials:'include', cache:'no-store' });
     const j = await r.json();
-    if (!r.ok) { box.innerHTML = `<small style="color:#a00">${j?.error||'Error'}</small>`; return; }
+    if (!r.ok) { box.innerHTML = `<small style="color:#a00">${esc(j?.error||'Error')}</small>`; return; }
     const items = Array.isArray(j.items)? j.items : [];
     box.innerHTML = items.map(c => `
-      <div class="row" style="align-items:center;gap:8px;margin:.3rem 0" data-id="${c.id}">
-        <input class="rename" value="${c.name.replace(/"/g,'&quot;')}" style="flex:1">
+      <div class="row" style="align-items:center;gap:8px;margin:.3rem 0" data-id="${esc(c.id)}">
+        <input class="rename" value="${esc(c.name)}" style="flex:1">
         <button class="save">Rename</button>
         <select class="reassign"><option value="">— Reassign to… —</option>
-          ${items.filter(x=>x.id!==c.id).map(x=>`<option value="${x.id}">${x.name}</option>`).join('')}
+          ${items.filter(x=>x.id!==c.id).map(x=>`<option value="${esc(x.id)}">${esc(x.name)}</option>`).join('')}
         </select>
         <button class="del" style="background:#b33">Delete</button>
       </div>
